@@ -51,10 +51,10 @@ describe('system check formatter', () => {
       get: jest.fn((key: string) => ({
         enableTelegramBot: true,
         telegramAccessMode: 'approval',
-        telegramAdminChatIds: ['1751863131'],
+        telegramAdminChatIds: ['111111111'],
         telegramAllowedChatIds: ['123456789'],
         telegramAllowedChatId: '123456789',
-        telegramChatId: '1751863131',
+        telegramChatId: '111111111',
         enableScheduler: true,
         dailyRunTime: '08:00',
         dailyCron: '0 8 * * *',
