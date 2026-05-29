@@ -1,0 +1,80 @@
+{
+  "searchMetadata": {
+    "shoppingId": "fixture-shopping-id",
+    "currency": "ARS",
+    "flightType": "ONE_WAY",
+    "routes": ["AEP-MDZ"]
+  },
+  "brandedOffers": {
+    "0": [
+      {
+        "legs": [
+          {
+            "segments": [
+              {
+                "flightNumber": 1910,
+                "airline": "AR",
+                "operatingAirline": "AR",
+                "departure": "2026-07-15T13:30:00",
+                "arrival": "2026-07-15T15:30:00",
+                "origin": "AEP",
+                "destination": "MDZ"
+              }
+            ],
+            "stops": 0,
+            "totalDuration": 120
+          }
+        ],
+        "offers": [
+          {
+            "cabinClass": "Economy",
+            "bookingClass": "A",
+            "fareBasis": "AYEB",
+            "brand": { "id": "EB", "name": "Base" },
+            "seatAvailability": { "seats": 1, "lowAvailability": true },
+            "fare": { "baseFare": 32101, "taxes": 27105, "total": 84979 }
+          },
+          {
+            "cabinClass": "Economy",
+            "bookingClass": "A",
+            "fareBasis": "AYEP",
+            "brand": { "id": "EP", "name": "Plus" },
+            "seatAvailability": { "seats": 1, "lowAvailability": true },
+            "fare": { "baseFare": 53737, "taxes": 29377, "total": 108887 }
+          }
+        ],
+        "bestOffer": true
+      },
+      {
+        "legs": [
+          {
+            "segments": [
+              {
+                "flightNumber": 1406,
+                "airline": "AR",
+                "operatingAirline": "AR",
+                "departure": "2026-07-15T07:35:00",
+                "arrival": "2026-07-15T09:35:00",
+                "origin": "EZE",
+                "destination": "MDZ"
+              }
+            ],
+            "stops": 0,
+            "totalDuration": 120
+          }
+        ],
+        "offers": [
+          {
+            "cabinClass": "Economy",
+            "bookingClass": "A",
+            "fareBasis": "AYEB",
+            "brand": { "id": "EB", "name": "Base" },
+            "seatAvailability": { "seats": 9, "lowAvailability": false },
+            "fare": { "baseFare": 150000, "taxes": 51680, "total": 201680 }
+          }
+        ],
+        "bestOffer": false
+      }
+    ]
+  }
+}

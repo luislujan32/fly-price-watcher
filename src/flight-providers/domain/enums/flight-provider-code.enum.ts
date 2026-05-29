@@ -1,0 +1,6 @@
+export enum FlightProviderCode {
+  FAKE = 'FAKE',
+  AEROLINEAS_ARGENTINAS = 'AEROLINEAS_ARGENTINAS',
+  FLYBONDI = 'FLYBONDI',
+  JETSMART = 'JETSMART',
+}
