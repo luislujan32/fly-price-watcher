@@ -67,9 +67,11 @@ export class AlertMessageFormatter {
       this.criteria(currentRun.cheapestPrice === currentRun.recommendedPrice),
       '',
       'Filtros aplicados:',
-      '✅ Solo vuelos directos',
+      search.allowStops !== false ? '✅ Vuelos con escalas permitidos' : '✅ Solo vuelos directos',
       '✅ Aeropuerto exacto',
-      'Se excluyen opciones con escala o desde/hacia otro aeropuerto.',
+      search.allowStops !== false
+        ? 'Se incluyen vuelos con escala. Se excluyen opciones desde/hacia otro aeropuerto.'
+        : 'Se excluyen opciones con escala o desde/hacia otro aeropuerto.',
       this.debugTagsLine(recommended?.tags ?? []),
     ].filter((line): line is string => line !== undefined).join('\n');
   }
@@ -163,7 +165,8 @@ export class AlertMessageFormatter {
       .filter((fare) => fare.price !== this.legPrice(option) || fare.fareName !== (option.cheapestFareName ?? option.fareName))
       .map((fare) => `${fare.fareName ?? 'Tarifa'} ${this.money(fare.price, fare.currency)}`);
     return [
-      `${index + 1}. ${option.isRecommended ? '⭐ ' : ''}${option.flightNumber ?? 'Vuelo'} | ${option.origin ?? '?'} → ${option.destination ?? '?'}`,
+      `${index + 1}. ${option.isRecommended ? '⭐ ' : ''}${option.flightNumber ?? 'Vuelo'} | ${option.origin ?? '?'} → ${option.destination ?? '?'}${option.hasStops ? ' 🔀 con escala' : ''}`,
+
       `   ${this.displayLegTimes(option)}`,
       `   Desde ${this.money(this.legPrice(option), option.currency)} | ${[
         option.cheapestFareName ?? option.fareName ?? 'Tarifa N/D',

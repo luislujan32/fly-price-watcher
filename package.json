@@ -7,6 +7,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "ts-node -r tsconfig-paths/register src/main.ts",
     "start:local": "ts-node -r tsconfig-paths/register src/main.ts",
+    "start:dev": "ts-node -r tsconfig-paths/register src/main.ts",
     "dev:all": "npm run start:local",
     "start:prod": "node dist/main.js",
     "seed": "ts-node -r tsconfig-paths/register src/seed/run-seed.ts",
@@ -22,6 +23,7 @@
     "check:prod": "ts-node -r tsconfig-paths/register src/production/run-check-prod.ts",
     "check:local": "ts-node -r tsconfig-paths/register src/development/run-check-local.ts",
     "aerolineas:test": "ts-node -r tsconfig-paths/register src/flight-providers/infrastructure/providers/aerolineas-argentinas/run-aerolineas-test.ts",
+    "jetsmart:test": "ts-node -r tsconfig-paths/register src/flight-providers/infrastructure/providers/jetsmart/run-jetsmart-test.ts",
     "test": "jest --runInBand"
   },
   "dependencies": {

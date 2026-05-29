@@ -144,7 +144,7 @@ export class AerolineasResponseMapper {
       return false;
     }
 
-    if (candidate.hasStops) {
+    if (query.allowStops === false && candidate.hasStops) {
       this.discard(diagnostics, candidate, 'HAS_STOPS', `segments=${candidate.segments.length} stops=${candidate.leg.stops ?? 0}`);
       return false;
     }

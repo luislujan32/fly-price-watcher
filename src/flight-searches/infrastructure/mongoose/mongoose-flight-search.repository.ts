@@ -108,6 +108,8 @@ export class MongooseFlightSearchRepository implements FlightSearchRepository {
       cabinClass: record.cabinClass,
       currency: record.currency,
       adults: record.adults,
+      children: record.children,
+      allowStops: record.allowStops,
       providerCode: record.providerCode,
       telegramChatId: record.telegramChatId,
       targetPrice: record.targetPrice,

@@ -91,6 +91,7 @@ export class FlightPriceWatchService {
       validOptionsFound: 0,
       status: undefined,
       search: searches.length === 1 ? searches[0] : undefined,
+      latestSuccessfulRun: undefined,
     };
 
     this.logger.log(`Active searches: ${result.activeSearches}.`);
@@ -114,6 +115,8 @@ export class FlightPriceWatchService {
         cabinClass: search.cabinClass,
         currency: search.currency,
         adults: search.adults,
+        children: search.children,
+        allowStops: search.allowStops,
       };
 
       const providersForSearch = search.providerCode
@@ -224,24 +227,7 @@ export class FlightPriceWatchService {
               }
             }
 
-            if (options.sendInitialSummary) {
-              const notificationResult = await this.notifications.send({
-                title: 'INITIAL_SUMMARY',
-                body: this.alertMessages.initialSummary(search, currentRun),
-                metadata: {
-                  searchId: currentRun.searchId,
-                  providerCode: currentRun.providerCode,
-                  ...(currentRun.id ? { runId: currentRun.id } : {}),
-                  ...(search.telegramChatId ? { telegramChatId: search.telegramChatId } : {}),
-                  notificationType: 'INITIAL_SUMMARY',
-                },
-              });
-              result.notificationAttempts += notificationResult.attempts;
-              result.notificationSuccesses += notificationResult.successes;
-              result.notificationFailures += notificationResult.failures;
-              result.notificationsSent = result.notificationSuccesses;
-              this.logger.log(`Initial search result notification sent for search=${search.id}.`);
-            } else if (alerts.length) {
+            if (alerts.length) {
               const notificationResult = await this.notifications.send({
                 title: '',
                 body: this.alertMessages.consolidated(search, currentRun, alerts),
@@ -302,6 +288,26 @@ export class FlightPriceWatchService {
           );
           result.error = error instanceof Error ? error.message : String(error);
         }
+      }
+
+      if (options.sendInitialSummary && result.latestSuccessfulRun) {
+        const run = result.latestSuccessfulRun;
+        const notificationResult = await this.notifications.send({
+          title: 'INITIAL_SUMMARY',
+          body: this.alertMessages.initialSummary(search, run),
+          metadata: {
+            searchId: run.searchId,
+            providerCode: run.providerCode,
+            ...(run.id ? { runId: run.id } : {}),
+            ...(search.telegramChatId ? { telegramChatId: search.telegramChatId } : {}),
+            notificationType: 'INITIAL_SUMMARY',
+          },
+        });
+        result.notificationAttempts += notificationResult.attempts;
+        result.notificationSuccesses += notificationResult.successes;
+        result.notificationFailures += notificationResult.failures;
+        result.notificationsSent = result.notificationSuccesses;
+        this.logger.log(`Initial search result notification sent for search=${search.id}, provider=${run.providerCode}.`);
       }
     }
 

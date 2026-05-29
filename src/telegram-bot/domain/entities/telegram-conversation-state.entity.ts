@@ -13,6 +13,10 @@ export enum CreateSearchStep {
   RETURN_DATE = 'RETURN_DATE',
   ADULTS = 'ADULTS',
   CUSTOM_ADULTS = 'CUSTOM_ADULTS',
+  CHILDREN = 'CHILDREN',
+  CUSTOM_CHILDREN = 'CUSTOM_CHILDREN',
+  STOPS = 'STOPS',
+  PROVIDER = 'PROVIDER',
   TARGET_PRICE_CHOICE = 'TARGET_PRICE_CHOICE',
   TARGET_PRICE = 'TARGET_PRICE',
   CONFIRMATION = 'CONFIRMATION',
@@ -29,6 +33,9 @@ export type CreateSearchDraft = {
   departureDate?: string;
   returnDate?: string;
   adults?: number;
+  children?: number;
+  allowStops?: boolean;
+  providerCode?: string;
   targetPrice?: number;
 };
 

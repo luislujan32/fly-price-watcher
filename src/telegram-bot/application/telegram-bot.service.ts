@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AlertMessageFormatter } from '../../flight-alerts/domain/services/alert-message.formatter';
 import { CreateFlightSearchUseCase } from '../../flight-searches/application/use-cases/create-flight-search.use-case';
 import { ManageFlightSearchesUseCase } from '../../flight-searches/application/use-cases/manage-flight-searches.use-case';
 import { FlightSearch } from '../../flight-searches/domain/entities/flight-search.entity';
@@ -7,6 +8,7 @@ import { CabinClass } from '../../flight-searches/domain/enums/cabin-class.enum'
 import { Currency } from '../../flight-searches/domain/enums/currency.enum';
 import { TripType } from '../../flight-searches/domain/enums/trip-type.enum';
 import { FlightProviderCode } from '../../flight-providers/domain/enums/flight-provider-code.enum';
+import { jetsmartOperates } from '../../flight-providers/domain/provider-airports';
 import { GetLatestWatchRunUseCase } from '../../flight-watch-runs/application/use-cases/get-latest-watch-run.use-case';
 import { FlightWatchRun } from '../../flight-watch-runs/domain/entities/flight-watch-run.entity';
 import { FlightPriceWatchService } from '../../scheduler/application/services/flight-price-watch.service';
@@ -28,6 +30,7 @@ import {
   formatDate,
   parseAdultCount,
   parseAirportCode,
+  parseChildrenCount,
   parseDateInput,
   parseTargetPrice,
 } from './validators/create-search-wizard.validators';
@@ -48,6 +51,7 @@ export class TelegramBotService {
     private readonly manageSearches: ManageFlightSearchesUseCase,
     private readonly latestWatchRun: GetLatestWatchRunUseCase,
     private readonly flightPriceWatch: FlightPriceWatchService,
+    private readonly alertMessages: AlertMessageFormatter,
     private readonly airports: AirportResolverService,
     private readonly accessControl: TelegramAccessControlService,
     @Inject(TELEGRAM_CONVERSATION_STATE_REPOSITORY)
@@ -498,13 +502,38 @@ export class TelegramBotService {
     }
     if (data === 'create:adults:1' || data === 'create:adults:2') {
       const adults = data.endsWith(':2') ? 2 : 1;
-      await this.saveCreateSearchState(chatId, CreateSearchStep.TARGET_PRICE_CHOICE, { ...draft, adults });
-      await this.askTargetPriceChoice(chatId);
+      await this.saveCreateSearchState(chatId, CreateSearchStep.CHILDREN, { ...draft, adults });
+      await this.askChildren(chatId);
       return;
     }
     if (data === 'create:adults:other') {
       await this.saveCreateSearchState(chatId, CreateSearchStep.CUSTOM_ADULTS, draft);
       await this.client.sendMessage(chatId, 'Cuántos adultos? Escribí un número entre 1 y 9.');
+      return;
+    }
+    if (data === 'create:children:0' || data === 'create:children:1' || data === 'create:children:2') {
+      const children = data.endsWith(':0') ? 0 : data.endsWith(':1') ? 1 : 2;
+      await this.saveCreateSearchState(chatId, CreateSearchStep.STOPS, { ...draft, children });
+      await this.askStops(chatId);
+      return;
+    }
+    if (data === 'create:children:other') {
+      await this.saveCreateSearchState(chatId, CreateSearchStep.CUSTOM_CHILDREN, draft);
+      await this.client.sendMessage(chatId, 'Cuántos niños? Escribí un número entre 0 y 9.');
+      return;
+    }
+    if (data === 'create:stops:yes' || data === 'create:stops:no') {
+      const allowStops = data === 'create:stops:yes';
+      const nextDraft = { ...draft, allowStops };
+      await this.saveCreateSearchState(chatId, CreateSearchStep.PROVIDER, nextDraft);
+      await this.askProvider(chatId, nextDraft.origin, nextDraft.destination);
+      return;
+    }
+    if (data.startsWith('create:provider:')) {
+      const providerKey = data.replace('create:provider:', '');
+      const providerCode = providerKey;
+      await this.saveCreateSearchState(chatId, CreateSearchStep.TARGET_PRICE_CHOICE, { ...draft, providerCode });
+      await this.askTargetPriceChoice(chatId);
       return;
     }
     if (data === 'create:target:omit') {
@@ -782,7 +811,7 @@ export class TelegramBotService {
       `Alertas activas: ${activeSearches}`,
       `Límite de alertas: ${this.maxSearchesPerUser()}`,
       `Scheduler: ${this.config.get<boolean>('enableScheduler') === true ? 'activo' : 'inactivo'}`,
-      `Consulta al crear: ${this.runWatchAfterCreate() ? 'activa' : 'inactiva'}`,
+      `Consulta al crear: activa`,
     ].join('\n'));
   }
 
@@ -1111,14 +1140,43 @@ export class TelegramBotService {
         await this.client.sendMessage(chatId, 'Cantidad inválida. Escribí un entero entre 1 y 9.');
         return;
       }
-      await this.saveCreateSearchState(chatId, CreateSearchStep.TARGET_PRICE_CHOICE, { ...draft, adults });
-      await this.askTargetPriceChoice(chatId);
+      await this.saveCreateSearchState(chatId, CreateSearchStep.CHILDREN, { ...draft, adults });
+      await this.askChildren(chatId);
       return;
     }
 
     if (state.step === CreateSearchStep.ADULTS) {
       await this.client.sendMessage(chatId, 'Elegí la cantidad de adultos usando los botones.');
       await this.askAdults(chatId);
+      return;
+    }
+
+    if (state.step === CreateSearchStep.CHILDREN) {
+      await this.client.sendMessage(chatId, 'Elegí la cantidad de niños usando los botones.');
+      await this.askChildren(chatId);
+      return;
+    }
+
+    if (state.step === CreateSearchStep.CUSTOM_CHILDREN) {
+      const children = parseChildrenCount(text);
+      if (children === null) {
+        await this.client.sendMessage(chatId, 'Cantidad inválida. Escribí un entero entre 0 y 9.');
+        return;
+      }
+      await this.saveCreateSearchState(chatId, CreateSearchStep.STOPS, { ...draft, children });
+      await this.askStops(chatId);
+      return;
+    }
+
+    if (state.step === CreateSearchStep.STOPS) {
+      await this.client.sendMessage(chatId, 'Indicá si aceptás escalas usando los botones.');
+      await this.askStops(chatId);
+      return;
+    }
+
+    if (state.step === CreateSearchStep.PROVIDER) {
+      await this.client.sendMessage(chatId, 'Elegí la aerolínea usando los botones.');
+      await this.askProvider(chatId, draft.origin, draft.destination);
       return;
     }
 
@@ -1187,6 +1245,46 @@ export class TelegramBotService {
     });
   }
 
+  private async askChildren(chatId: string): Promise<void> {
+    await this.client.sendMessage(chatId, '¿Viajan niños?', {
+      replyMarkup: {
+        inline_keyboard: [
+          [{ text: 'No, solo adultos', callback_data: 'create:children:0' }],
+          [{ text: '1 niño', callback_data: 'create:children:1' }],
+          [{ text: '2 niños', callback_data: 'create:children:2' }],
+          [{ text: 'Otro', callback_data: 'create:children:other' }],
+        ],
+      },
+    });
+  }
+
+  private async askStops(chatId: string): Promise<void> {
+    await this.client.sendMessage(chatId, '¿Aceptás vuelos con escalas?', {
+      replyMarkup: {
+        inline_keyboard: [
+          [{ text: '✈️ Solo vuelos directos', callback_data: 'create:stops:no' }],
+          [{ text: '✅ Sí, acepto escalas', callback_data: 'create:stops:yes' }],
+        ],
+      },
+    });
+  }
+
+  private async askProvider(chatId: string, origin?: string, destination?: string): Promise<void> {
+    const showJetSmart = origin && destination ? jetsmartOperates(origin, destination) : true;
+
+    const buttons: { text: string; callback_data: string }[][] = [
+      [{ text: '🔵 Aerolíneas Argentinas', callback_data: 'create:provider:AEROLINEAS_ARGENTINAS' }],
+    ];
+
+    if (showJetSmart) {
+      buttons.push([{ text: '🟡 JetSMART', callback_data: 'create:provider:JETSMART' }]);
+    }
+
+    await this.client.sendMessage(chatId, '¿Qué aerolínea querés consultar?', {
+      replyMarkup: { inline_keyboard: buttons },
+    });
+  }
+
   private async askTargetPriceChoice(chatId: string): Promise<void> {
     await this.client.sendMessage(chatId, [
       '¿Querés definir un precio objetivo?',
@@ -1237,7 +1335,9 @@ export class TelegramBotService {
       cabinClass: CabinClass.ECONOMY,
       currency: Currency.ARS,
       adults: draft.adults,
-      providerCode: FlightProviderCode.AEROLINEAS_ARGENTINAS,
+      children: draft.children ?? 0,
+      allowStops: draft.allowStops ?? false,
+      providerCode: draft.providerCode ? draft.providerCode as FlightProviderCode : undefined,
       telegramChatId: chatId,
       targetPrice: draft.targetPrice,
       notifyAlways: true,
@@ -1247,11 +1347,6 @@ export class TelegramBotService {
   }
 
   private async afterCreateSearch(chatId: string, search: FlightSearch): Promise<void> {
-    if (!this.runWatchAfterCreate()) {
-      await this.client.sendMessage(chatId, 'Alerta creada. La revisaré en la próxima ejecución programada.');
-      return;
-    }
-
     await this.client.sendMessage(chatId, '✅ Alerta creada. Voy a consultar el precio actual...');
     if (!search.id) {
       await this.client.sendMessage(chatId, 'La alerta fue creada, pero no pude consultar el precio ahora. Lo intentaré en la próxima ejecución programada.');
@@ -1259,19 +1354,16 @@ export class TelegramBotService {
     }
 
     try {
-      const result = await this.flightPriceWatch.runOnceForSearch(search.id, { sendInitialSummary: true });
-      if (result.noResultsRuns > 0 || result.validOptionsFound === 0) {
+      const result = await this.flightPriceWatch.runOnceForSearch(search.id);
+      if (!result.latestSuccessfulRun) {
         await this.client.sendMessage(chatId, 'Alerta creada. No encontré vuelos válidos para esta búsqueda por ahora.');
+        return;
       }
+      await this.client.sendMessage(chatId, this.alertMessages.initialSummary(search, result.latestSuccessfulRun));
     } catch (error) {
       this.logger.warn(`Initial watch after create failed for search=${search.id}: ${this.errorMessage(error)}`);
       await this.client.sendMessage(chatId, 'La alerta fue creada, pero no pude consultar el precio ahora. Lo intentaré en la próxima ejecución programada.');
     }
-  }
-
-  private runWatchAfterCreate(): boolean {
-    const value = this.config.get<boolean>('runWatchAfterCreate');
-    return typeof value === 'boolean' ? value : process.env.RUN_WATCH_AFTER_CREATE !== 'false';
   }
 
   private maxSearchesPerUser(): number {
@@ -1285,15 +1377,20 @@ export class TelegramBotService {
     const route = draft.tripType === TripType.ROUND_TRIP
       ? `${this.airports.label(draft.origin)} ↔ ${this.airports.label(draft.destination)}`
       : `${this.airports.label(draft.origin)} → ${this.airports.label(draft.destination)}`;
+    const providerLabel = draft.providerCode === 'AEROLINEAS_ARGENTINAS'
+      ? 'Aerolíneas Argentinas'
+      : draft.providerCode === 'JETSMART'
+        ? 'JetSMART'
+        : 'sin definir';
     return [
       `✈️ ${draft.name ?? 'N/D'}`,
       '',
       route,
       `${departureDate ? formatDate(departureDate) : 'N/D'}${returnDate ? ` al ${formatDate(returnDate)}` : ''}`,
       `Adultos: ${draft.adults ?? 1}`,
-      'Proveedor: Aerolíneas Argentinas',
-      'Solo directos: sí',
-      'Aeropuerto exacto: sí',
+      `Niños: ${draft.children ?? 0}`,
+      `Escalas: ${draft.allowStops ? 'sí' : 'solo directos'}`,
+      `Aerolínea: ${providerLabel}`,
       `Precio objetivo: ${draft.targetPrice ? `$${Math.round(draft.targetPrice).toLocaleString('de-DE')} ARS` : 'sin definir'}`,
     ].join('\n');
   }
@@ -1395,18 +1492,38 @@ export class TelegramBotService {
 
   private frequentAirportKeyboard(field: 'origin' | 'destination'): TelegramInlineKeyboardMarkup {
     const airports = [
-      ['JUJ', 'Jujuy'],
       ['AEP', 'Aeroparque'],
       ['EZE', 'Ezeiza'],
-      ['MDZ', 'Mendoza'],
       ['COR', 'Córdoba'],
+      ['MDZ', 'Mendoza'],
+      ['ROS', 'Rosario'],
+      ['BRC', 'Bariloche'],
+      ['USH', 'Ushuaia'],
+      ['FTE', 'El Calafate'],
+      ['IGR', 'Iguazú'],
       ['SLA', 'Salta'],
+      ['TUC', 'Tucumán'],
+      ['NQN', 'Neuquén'],
+      ['JUJ', 'Jujuy'],
+      ['CRD', 'Comodoro Rivadavia'],
+      ['PMY', 'Puerto Madryn'],
+      ['REL', 'Trelew'],
+      ['RGL', 'Río Gallegos'],
+      ['PSS', 'Posadas'],
+      ['MDQ', 'Mar del Plata'],
+      ['UAQ', 'San Juan'],
+      ['EQS', 'Esquel'],
+      ['CPC', 'San Martín de los Andes'],
     ];
-    return {
-      inline_keyboard: airports.map(([code, label]) => [
-        { text: `${code} — ${label}`, callback_data: `select_airport:${field}:${code}` },
-      ]),
-    };
+    const rows: { text: string; callback_data: string }[][] = [];
+    for (let i = 0; i < airports.length; i += 2) {
+      const row = airports.slice(i, i + 2).map(([code, label]) => ({
+        text: `${code} — ${label}`,
+        callback_data: `select_airport:${field}:${code}`,
+      }));
+      rows.push(row);
+    }
+    return { inline_keyboard: rows };
   }
 
   private async resolveAirportInput(

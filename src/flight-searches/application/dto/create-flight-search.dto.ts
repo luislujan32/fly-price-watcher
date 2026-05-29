@@ -13,6 +13,8 @@ export type CreateFlightSearchDto = {
   cabinClass: CabinClass;
   currency: Currency;
   adults: number;
+  children?: number;
+  allowStops?: boolean;
   providerCode?: FlightProviderCode;
   telegramChatId?: string;
   targetPrice?: number;

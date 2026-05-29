@@ -37,6 +37,12 @@ export function parseAdultCount(value: string): number | null {
   return Number.isInteger(number) && number >= 1 && number <= 9 ? number : null;
 }
 
+export function parseChildrenCount(value: string): number | null {
+  const trimmed = value.trim();
+  const number = trimmed ? Number(trimmed) : 0;
+  return Number.isInteger(number) && number >= 0 && number <= 9 ? number : null;
+}
+
 export function parseTargetPrice(value: string): number | undefined | null {
   const trimmed = value.trim().toLowerCase();
   if (trimmed === 'omitir') {

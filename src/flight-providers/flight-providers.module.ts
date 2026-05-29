@@ -10,6 +10,10 @@ import { AerolineasQueryMapper } from './infrastructure/providers/aerolineas-arg
 import { AerolineasResponseMapper } from './infrastructure/providers/aerolineas-argentinas/aerolineas-response.mapper';
 import { AerolineasTokenProvider } from './infrastructure/providers/aerolineas-argentinas/aerolineas-token.provider';
 import { FakeFlightProvider } from './infrastructure/providers/fake/fake-flight.provider';
+import { JetSmartApiClient } from './infrastructure/providers/jetsmart/jetsmart-api.client';
+import { JetSmartProvider } from './infrastructure/providers/jetsmart/jetsmart.provider';
+import { JetSmartQueryMapper } from './infrastructure/providers/jetsmart/jetsmart-query.mapper';
+import { JetSmartResponseMapper } from './infrastructure/providers/jetsmart/jetsmart-response.mapper';
 
 @Module({
   providers: [
@@ -20,20 +24,26 @@ import { FakeFlightProvider } from './infrastructure/providers/fake/fake-flight.
     AerolineasTokenProvider,
     AerolineasArgentinasApiClient,
     AerolineasArgentinasProvider,
+    JetSmartQueryMapper,
+    JetSmartResponseMapper,
+    JetSmartApiClient,
+    JetSmartProvider,
     {
       provide: FLIGHT_PROVIDERS,
       useFactory: (
         config: ConfigService,
         fake: FakeFlightProvider,
         aerolineas: AerolineasArgentinasProvider,
+        jetsmart: JetSmartProvider,
       ) => {
         const enabled = config.get<string[]>('enabledFlightProviders') ?? [FlightProviderCode.FAKE];
         return [
           enabled.includes(FlightProviderCode.FAKE) ? fake : null,
           enabled.includes(FlightProviderCode.AEROLINEAS_ARGENTINAS) ? aerolineas : null,
+          enabled.includes(FlightProviderCode.JETSMART) ? jetsmart : null,
         ].filter(Boolean);
       },
-      inject: [ConfigService, FakeFlightProvider, AerolineasArgentinasProvider],
+      inject: [ConfigService, FakeFlightProvider, AerolineasArgentinasProvider, JetSmartProvider],
     },
     FlightProviderRegistry,
   ],

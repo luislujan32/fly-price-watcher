@@ -42,6 +42,10 @@ export const appConfig = () => ({
   aerolineasHttpTimeoutMs: Number(process.env.AEROLINEAS_HTTP_TIMEOUT_MS ?? 15000),
   aerolineasHttpRetries: Number(process.env.AEROLINEAS_HTTP_RETRIES ?? 1),
   aerolineasTokenTtlSeconds: Number(process.env.AEROLINEAS_TOKEN_TTL_SECONDS ?? 900),
+  jetsmartApiBaseUrl: process.env.JETSMART_API_BASE_URL ?? 'https://origin.jsrtff.it.jetsm.art',
+  jetsmartHttpTimeoutMs: Number(process.env.JETSMART_HTTP_TIMEOUT_MS ?? 15000),
+  jetsmartHttpRetries: Number(process.env.JETSMART_HTTP_RETRIES ?? 1),
+  jetsmartPointOfSaleCountry: process.env.JETSMART_POINT_OF_SALE_COUNTRY ?? 'AR',
   maxQuotesPerSearch: Number(process.env.MAX_QUOTES_PER_SEARCH ?? 5),
   maxLegOptionsInAlert: Number(process.env.MAX_LEG_OPTIONS_IN_ALERT ?? 3),
 });
