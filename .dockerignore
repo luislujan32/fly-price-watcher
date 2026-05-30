@@ -2,9 +2,14 @@ node_modules
 dist
 coverage
 .git
+.DS_Store
 .env
 .env.*
-!.env.production.example
 npm-debug.log
+*.log
+*.tmp
+tmp
+temp
+context
 Dockerfile
 docker-compose.yml

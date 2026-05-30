@@ -36,20 +36,26 @@ describe('AlertMessageFormatter', () => {
       '🏷️ Tarifa: Base',
       '💺 Asientos disponibles: 4',
       '',
-      'Desglose recomendado:',
-      'Ida: $120.000 ARS',
-      'Vuelta: $114.664 ARS',
-      'Total: $234.664 ARS',
+      '💵 Desglose recomendado',
+      '🛫 Ida: $120.000 ARS',
+      '🛬 Vuelta: $114.664 ARS',
+      '💰 Total: $234.664 ARS',
       '',
-      'Ida — vuelos válidos:',
-      '1. ⭐ AR1517 | JUJ → AEP',
-      '   20/12/2026 12:00 → 14:10',
-      '   Desde $120.000 ARS | Base | más barata',
+      '━━━━━━━━━━━━━━',
+      '🛫 Ida — vuelos válidos',
+      '━━━━━━━━━━━━━━',
+      '1️⃣ ⭐ AR1517 | JUJ → AEP',
+      '📅 20/12/2026',
+      '🕒 12:00 → 14:10',
+      '💵 Desde $120.000 ARS | Base | más barata',
       '',
-      'Vuelta — vuelos válidos:',
-      '1. ⭐ AR1512 | AEP → JUJ',
-      '   28/12/2026 08:00 → 10:20',
-      '   Desde $114.664 ARS | Base | más barata',
+      '━━━━━━━━━━━━━━',
+      '🛬 Vuelta — vuelos válidos',
+      '━━━━━━━━━━━━━━',
+      '1️⃣ ⭐ AR1512 | AEP → JUJ',
+      '📅 28/12/2026',
+      '🕒 08:00 → 10:20',
+      '💵 Desde $114.664 ARS | Base | más barata',
       '',
       '📌 Hay 4 opciones al precio mínimo.',
       'Criterio: más barato y buen horario.',
@@ -120,10 +126,10 @@ describe('AlertMessageFormatter', () => {
   it('shows valid outbound and inbound options without discarded options', () => {
     const message = formatter.dailySummary(search(), run({ includeExtraOptions: true }));
 
-    expect(message).toContain('Ida — vuelos válidos:');
+    expect(message).toContain('🛫 Ida — vuelos válidos');
     expect(message).toContain('AR1517 | JUJ → AEP');
     expect(message).toContain('AR1519 | JUJ → AEP');
-    expect(message).toContain('Vuelta — vuelos válidos:');
+    expect(message).toContain('🛬 Vuelta — vuelos válidos');
     expect(message).toContain('AR1512 | AEP → JUJ');
     expect(message).toContain('AR1516 | AEP → JUJ');
     expect(message).not.toContain('JUJ → EZE');
@@ -133,10 +139,10 @@ describe('AlertMessageFormatter', () => {
   it('marks recommended and cheapest leg options', () => {
     const message = formatter.dailySummary(search(), run());
 
-    expect(message).toContain('1. ⭐ AR1517 | JUJ → AEP');
-    expect(message).toContain('Desde $120.000 ARS | Base | más barata');
-    expect(message).toContain('1. ⭐ AR1512 | AEP → JUJ');
-    expect(message).toContain('Desde $114.664 ARS | Base | más barata');
+    expect(message).toContain('1️⃣ ⭐ AR1517 | JUJ → AEP');
+    expect(message).toContain('💵 Desde $120.000 ARS | Base | más barata');
+    expect(message).toContain('1️⃣ ⭐ AR1512 | AEP → JUJ');
+    expect(message).toContain('💵 Desde $114.664 ARS | Base | más barata');
   });
 
   it('respects MAX_LEG_OPTIONS_IN_ALERT', () => {
@@ -151,7 +157,7 @@ describe('AlertMessageFormatter', () => {
   it('includes applied filters and exclusion note', () => {
     const message = formatter.dailySummary(search(), run());
 
-    expect(message).toContain('Filtros aplicados:');
+    expect(message).toContain('🔎 Filtros aplicados');
     expect(message).toContain('✅ Solo vuelos directos');
     expect(message).toContain('✅ Aeropuerto exacto');
     expect(message).toContain('Se excluyen opciones con escala o desde/hacia otro aeropuerto.');
@@ -161,7 +167,33 @@ describe('AlertMessageFormatter', () => {
     const message = formatter.dailySummary(search(), run({ includeFareFamilies: true }));
 
     expect(message.match(/AR1517 \| JUJ → AEP/g)).toHaveLength(1);
-    expect(message).toContain('Otras tarifas: Plus $130.000 ARS, Flex $150.000 ARS');
+    expect(message).toContain('🏷️ Otras tarifas: Plus $130.000 ARS, Flex $150.000 ARS');
+  });
+
+  it('uses visual separators, emoji numbering, date and time lines for leg options', () => {
+    const message = formatter.dailySummary(search(), run({ includeExtraOptions: true }));
+
+    expect(message).toContain([
+      '━━━━━━━━━━━━━━',
+      '🛫 Ida — vuelos válidos',
+      '━━━━━━━━━━━━━━',
+    ].join('\n'));
+    expect(message).toContain([
+      '━━━━━━━━━━━━━━',
+      '🛬 Vuelta — vuelos válidos',
+      '━━━━━━━━━━━━━━',
+    ].join('\n'));
+    expect(message).toContain('1️⃣ ⭐ AR1517 | JUJ → AEP');
+    expect(message).toContain('2️⃣ AR1519 | JUJ → AEP');
+    expect(message).toContain('📅 20/12/2026');
+    expect(message).toContain('🕒 12:00 → 14:10');
+  });
+
+  it('does not expose INITIAL_SUMMARY as a technical prefix', () => {
+    const message = formatter.initialSummary(search(), run());
+
+    expect(message.startsWith('🔎 Resultado inicial')).toBe(true);
+    expect(message).not.toContain('INITIAL_SUMMARY');
   });
 });
 
