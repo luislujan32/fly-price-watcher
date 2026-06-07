@@ -9,6 +9,7 @@ describe('appConfig', () => {
     delete process.env.TELEGRAM_ACCESS_MODE;
     delete process.env.TELEGRAM_ADMIN_CHAT_IDS;
     delete process.env.MAX_SEARCHES_PER_USER;
+    delete process.env.APP_TIMEZONE;
   });
 
   afterAll(() => {
@@ -23,6 +24,10 @@ describe('appConfig', () => {
 
   it('disables Telegram bot by default', () => {
     expect(appConfig().enableTelegramBot).toBe(false);
+  });
+
+  it('uses Argentina as the default app timezone', () => {
+    expect(appConfig().appTimezone).toBe('America/Argentina/Buenos_Aires');
   });
 
   it('reads Telegram approval access config', () => {

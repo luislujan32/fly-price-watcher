@@ -40,6 +40,7 @@ export class TelegramNotificationChannel implements NotificationChannelPort {
     chat_id: string;
     text: string;
     parse_mode?: 'MarkdownV2' | 'HTML';
+    reply_markup?: NotificationMessage['replyMarkup'];
   } {
     const parseMode = this.parseMode();
     const plainText = message.body;
@@ -49,6 +50,7 @@ export class TelegramNotificationChannel implements NotificationChannelPort {
         chat_id: chatId,
         text: this.escapeMarkdownV2(plainText),
         parse_mode: 'MarkdownV2',
+        ...(message.replyMarkup ? { reply_markup: message.replyMarkup } : {}),
       };
     }
 
@@ -57,12 +59,14 @@ export class TelegramNotificationChannel implements NotificationChannelPort {
         chat_id: chatId,
         text: this.escapeHtml(plainText),
         parse_mode: 'HTML',
+        ...(message.replyMarkup ? { reply_markup: message.replyMarkup } : {}),
       };
     }
 
     return {
       chat_id: chatId,
       text: plainText,
+      ...(message.replyMarkup ? { reply_markup: message.replyMarkup } : {}),
     };
   }
 

@@ -397,11 +397,16 @@ export class TelegramBotService {
       return;
     }
 
+    if (data.startsWith('renewal:')) {
+      await this.handleRenewalCallback(chatId, data);
+      return;
+    }
+
     await this.handleSearchCallback(chatId, data);
   }
 
   private async handleSearchCallback(chatId: string, data: string): Promise<void> {
-    const match = /^search:(view|pause|activate|summary|delete|confirm_delete|cancel_delete):(\d+)$/.exec(data);
+    const match = /^search:(view|pause|activate|renew|manual|summary|delete|confirm_delete|cancel_delete):(\d+)$/.exec(data);
     if (!match) {
       await this.client.sendMessage(chatId, 'No pude interpretar esa acción. Usá /listar para ver tus alertas.');
       return;
@@ -425,6 +430,14 @@ export class TelegramBotService {
       await this.updateSearchStateByIndex(chatId, index, 'activate');
       return;
     }
+    if (action === 'renew') {
+      await this.renewSearchByIndex(chatId, index);
+      return;
+    }
+    if (action === 'manual') {
+      await this.runManualWatchByIndex(chatId, index);
+      return;
+    }
     if (action === 'delete') {
       await this.confirmDeleteSearchByIndex(chatId, index);
       return;
@@ -435,6 +448,53 @@ export class TelegramBotService {
     }
     await this.client.sendMessage(chatId, 'Operación cancelada.');
     await this.sendSearchList(chatId);
+  }
+
+  private async handleRenewalCallback(chatId: string, data: string): Promise<void> {
+    const match = /^renewal:(continue|pause|delete|confirm_delete|cancel_delete|purchased):(.+)$/.exec(data);
+    if (!match) {
+      await this.client.sendMessage(chatId, 'No pude interpretar esa acción. Usá /listar para ver tus alertas.');
+      return;
+    }
+
+    const [, action, searchId] = match;
+    if (action === 'continue') {
+      const search = await this.manageSearches.renewById(searchId, chatId);
+      await this.client.sendMessage(chatId, search ? `✅ Perfecto. Sigo monitoreando ${search.name}.` : 'No encontré esa alerta.');
+      return;
+    }
+    if (action === 'pause') {
+      const search = await this.manageSearches.keepPausedById(searchId, chatId);
+      await this.client.sendMessage(chatId, search ? `⏸ Mantengo pausada ${search.name}.` : 'No encontré esa alerta.');
+      return;
+    }
+    if (action === 'purchased') {
+      const search = await this.manageSearches.markPurchasedById(searchId, chatId);
+      await this.client.sendMessage(chatId, search ? `✅ Genial. Marco ${search.name} como comprada y dejo de monitorearla.` : 'No encontré esa alerta.');
+      return;
+    }
+    if (action === 'delete') {
+      const search = await this.manageSearches.findByIdForChat(searchId, chatId);
+      if (!search) {
+        await this.client.sendMessage(chatId, 'No encontré esa alerta.');
+        return;
+      }
+      await this.client.sendMessage(chatId, `¿Seguro que querés borrar "${search.name}"?`, {
+        replyMarkup: {
+          inline_keyboard: [
+            [{ text: '✅ Sí, borrar', callback_data: `renewal:confirm_delete:${searchId}` }],
+            [{ text: '❌ Cancelar', callback_data: `renewal:cancel_delete:${searchId}` }],
+          ],
+        },
+      });
+      return;
+    }
+    if (action === 'confirm_delete') {
+      const search = await this.manageSearches.softDeleteByIdForChat(searchId, chatId);
+      await this.client.sendMessage(chatId, search ? `🗑️ Alerta borrada: ${search.name}.` : 'No encontré esa alerta.');
+      return;
+    }
+    await this.client.sendMessage(chatId, 'Operación cancelada.');
   }
 
   private async handleSelectAirportCallback(chatId: string, data: string): Promise<void> {
@@ -842,7 +902,7 @@ export class TelegramBotService {
       `${index}. ✈️ ${search.name}`,
       this.route(search),
       `${this.displayDate(search.departureDate)}${search.returnDate ? ` al ${this.displayDate(search.returnDate)}` : ''}`,
-      `Estado: ${search.isActive ? 'activa' : 'pausada'}`,
+      `Estado: ${this.searchStatusLabel(search).toLowerCase()}`,
       `Objetivo: ${search.targetPrice ? `$${Math.round(search.targetPrice).toLocaleString('de-DE')} ${search.currency}` : 'sin definir'}`,
     ].join('\n');
   }
@@ -886,6 +946,39 @@ export class TelegramBotService {
           ],
         ];
       }),
+    };
+  }
+
+  private searchDetailKeyboard(search: FlightSearch, index: number): TelegramInlineKeyboardMarkup {
+    if (search.requiresRenewal) {
+      return {
+        inline_keyboard: [
+          [{ text: '✅ Seguir monitoreando', callback_data: `search:renew:${index}` }],
+          [{ text: '🗑 Borrar alerta', callback_data: `search:delete:${index}` }],
+          [{ text: '📋 Mis alertas', callback_data: 'menu:list' }],
+        ],
+      };
+    }
+
+    if (!search.isActive) {
+      return {
+        inline_keyboard: [
+          [{ text: '▶️ Activar', callback_data: `search:activate:${index}` }],
+          [{ text: '🗑 Borrar alerta', callback_data: `search:delete:${index}` }],
+          [{ text: '📋 Mis alertas', callback_data: 'menu:list' }],
+        ],
+      };
+    }
+
+    return {
+      inline_keyboard: [
+        [{ text: '🔄 Consultar ahora', callback_data: `search:manual:${index}` }],
+        [
+          { text: '⏸ Pausar', callback_data: `search:pause:${index}` },
+          { text: '🗑 Borrar', callback_data: `search:delete:${index}` },
+        ],
+        [{ text: '📋 Mis alertas', callback_data: 'menu:list' }],
+      ],
     };
   }
 
@@ -935,7 +1028,9 @@ export class TelegramBotService {
       return;
     }
 
-    await this.client.sendMessage(chatId, this.searchDetailMessage(search, await this.latestWatchRun.execute(search.id)));
+    await this.client.sendMessage(chatId, this.searchDetailMessage(search, await this.latestWatchRun.execute(search.id)), {
+      replyMarkup: this.searchDetailKeyboard(search, index),
+    });
   }
 
   private async handleStateCommand(
@@ -978,6 +1073,41 @@ export class TelegramBotService {
       return;
     }
     await this.client.sendMessage(chatId, `🗑️ Alerta borrada: ${search.name}.`);
+  }
+
+  private async renewSearchByIndex(chatId: string, index: number): Promise<void> {
+    const search = await this.manageSearches.renewByDisplayIndex(index, chatId);
+    if (!search) {
+      await this.client.sendMessage(chatId, 'No encontré esa búsqueda. Usá /listar para ver los números disponibles.');
+      return;
+    }
+    await this.client.sendMessage(chatId, `✅ Perfecto. Sigo monitoreando ${search.name}.`);
+  }
+
+  private async runManualWatchByIndex(chatId: string, index: number): Promise<void> {
+    const search = await this.manageSearches.getByDisplayIndex(index, chatId);
+    if (!search?.id) {
+      await this.client.sendMessage(chatId, 'No encontré esa búsqueda. Usá /listar para ver los números disponibles.');
+      return;
+    }
+
+    const remainingMinutes = this.manualWatchCooldownRemainingMinutes(search);
+    if (remainingMinutes > 0) {
+      await this.client.sendMessage(chatId, `Ya consulté esta alerta hace poco. Probá de nuevo en ${remainingMinutes} ${remainingMinutes === 1 ? 'minuto' : 'minutos'}.`);
+      return;
+    }
+
+    await this.manageSearches.touchManualWatchByDisplayIndex(index, chatId, new Date());
+    await this.client.sendMessage(chatId, `🔎 Consultando precio actual para ${search.name}...`);
+    try {
+      const result = await this.flightPriceWatch.runOnceForSearch(search.id, { sendInitialSummary: true, manual: true });
+      if (result.noResultsRuns > 0 || result.validOptionsFound === 0) {
+        await this.client.sendMessage(chatId, 'No encontré vuelos válidos para esta búsqueda por ahora.');
+      }
+    } catch (error) {
+      this.logger.warn(`Manual watch failed for search=${search.id}: ${this.errorMessage(error)}`);
+      await this.client.sendMessage(chatId, 'No pude consultar el precio ahora. Probá de nuevo en unos minutos.');
+    }
   }
 
   private async confirmDeleteSearchByIndex(chatId: string, index: number): Promise<void> {
@@ -1390,6 +1520,20 @@ export class TelegramBotService {
     return Number.isFinite(value) && value > 0 ? value : 5;
   }
 
+  private manualWatchCooldownRemainingMinutes(search: FlightSearch): number {
+    if (!search.lastManualWatchAt) {
+      return 0;
+    }
+    const cooldownMs = this.manualWatchCooldownMinutes() * 60 * 1000;
+    const elapsedMs = Date.now() - search.lastManualWatchAt.getTime();
+    return Math.max(Math.ceil((cooldownMs - elapsedMs) / 60_000), 0);
+  }
+
+  private manualWatchCooldownMinutes(): number {
+    const value = this.config.get<number>('manualWatchCooldownMinutes') ?? 10;
+    return Number.isFinite(value) && value >= 0 ? value : 10;
+  }
+
   private confirmationMessage(draft: CreateSearchDraft): string {
     const departureDate = draft.departureDate ? new Date(draft.departureDate) : undefined;
     const returnDate = draft.returnDate ? new Date(draft.returnDate) : undefined;
@@ -1415,33 +1559,129 @@ export class TelegramBotService {
   }
 
   private searchDetailMessage(search: FlightSearch, latestRun: FlightWatchRun | null): string {
+    const isRoundTrip = Boolean(search.returnDate);
     return [
       `🔎 ${search.name}`,
       '',
-      `Ruta: ${this.airports.label(search.origin)} ${search.returnDate ? '↔' : '→'} ${this.airports.label(search.destination)}`,
-      `Fechas: ${this.displayDate(search.departureDate)}${search.returnDate ? ` al ${this.displayDate(search.returnDate)}` : ''}`,
-      `Tipo: ${search.tripType === TripType.ROUND_TRIP ? 'Ida y vuelta' : 'Solo ida'}`,
-      `Adultos: ${search.adults}`,
-      `Precio objetivo: ${search.targetPrice ? `$${Math.round(search.targetPrice).toLocaleString('de-DE')} ${search.currency}` : 'sin definir'}`,
-      `Proveedor: ${search.providerCode ?? 'todos los habilitados'}`,
-      `Estado: ${search.isActive ? 'activa' : 'pausada'}`,
+      '✈️ Ruta',
+      this.route(search),
+      this.airportShortRoute(search.origin, search.destination, isRoundTrip),
       '',
-      latestRun ? this.latestRunMessage(latestRun) : 'Última corrida: sin datos todavía.',
-    ].join('\n');
+      '📅 Fechas',
+      `${this.displayDate(search.departureDate)}${search.returnDate ? ` al ${this.displayDate(search.returnDate)}` : ''}`,
+      `${isRoundTrip ? 'Ida y vuelta' : 'Solo ida'} · ${search.adults} ${search.adults === 1 ? 'adulto' : 'adultos'}`,
+      '',
+      '⚙️ Estado',
+      this.searchStatusLabel(search),
+      search.requiresRenewal ? 'Esta alerta está pausada porque necesita confirmación para seguir.' : undefined,
+      `Proveedor: ${this.providerLabel(search.providerCode)}`,
+      `Precio objetivo: ${this.targetPriceLabel(search)}`,
+      '',
+      latestRun ? this.latestRunMessage(latestRun) : 'Todavía no hay consultas registradas.',
+    ].filter((line): line is string => line !== undefined).join('\n');
+  }
+
+  private searchStatusLabel(search: FlightSearch): string {
+    if (search.requiresRenewal) {
+      return 'Requiere confirmación';
+    }
+    return search.isActive ? 'Activa' : 'Pausada';
   }
 
   private latestRunMessage(run: FlightWatchRun): string {
     const recommended = run.recommendedOption;
+    const outbound = this.recommendedFlightLines('Ida recomendada:', recommended?.outboundSummary);
+    const inbound = this.recommendedFlightLines('Vuelta recomendada:', recommended?.inboundSummary);
+    const lines = [
+      `Última consulta — ${this.displayDate(run.ranAt)}`,
+      '',
+    ];
+
+    if (run.cheapestPrice === undefined && run.recommendedPrice === undefined) {
+      lines.push('Todavía no hay precios disponibles.');
+    } else {
+      if (run.cheapestPrice !== undefined) {
+        lines.push('💰 Precio más barato', this.money(run.cheapestPrice, run.currency), '');
+      }
+      if (run.recommendedPrice !== undefined) {
+        lines.push(
+          '⭐ Recomendado',
+          `${this.money(run.recommendedPrice, run.currency)}${recommended?.fareName ? ` · ${recommended.fareName}` : ''}`,
+          '',
+        );
+      }
+    }
+
+    if (outbound.length) {
+      lines.push(...outbound, '');
+    }
+    if (inbound.length) {
+      lines.push(...inbound, '');
+    }
+
+    lines.push(`✅ Opciones válidas: ${run.validOptionsCount}`);
+    return lines.join('\n').trim();
+  }
+
+  private providerLabel(provider?: FlightProviderCode): string {
+    if (provider === FlightProviderCode.AEROLINEAS_ARGENTINAS) {
+      return 'Aerolíneas Argentinas';
+    }
+    if (provider === FlightProviderCode.FAKE) {
+      return 'Proveedor de prueba';
+    }
+    return 'Todos los habilitados';
+  }
+
+  private targetPriceLabel(search: FlightSearch): string {
+    return search.targetPrice ? this.money(search.targetPrice, search.currency) : 'sin definir';
+  }
+
+  private money(amount: number, currency?: Currency): string {
+    return `$${Math.round(amount).toLocaleString('de-DE')} ${currency ?? ''}`.trim();
+  }
+
+  private airportShortRoute(origin: string, destination: string, isRoundTrip: boolean): string {
+    return `${this.airportShortName(origin)} ${isRoundTrip ? '↔' : '→'} ${this.airportShortName(destination)}`;
+  }
+
+  private airportShortName(code: string): string {
+    const airport = this.airports.findByCode(code);
+    return airport?.shortName ?? airport?.city ?? code;
+  }
+
+  private recommendedFlightLines(title: string, summary?: string): string[] {
+    const flight = this.parseFlightSummary(summary);
+    if (!flight) {
+      return [];
+    }
     return [
-      'Última corrida:',
-      `Fecha: ${this.displayDate(run.ranAt)}`,
-      `Opciones válidas: ${run.validOptionsCount}`,
-      `Más barato: ${run.cheapestPrice !== undefined ? `$${Math.round(run.cheapestPrice).toLocaleString('de-DE')} ${run.currency ?? ''}`.trim() : 'N/D'}`,
-      `Recomendado: ${run.recommendedPrice !== undefined ? `$${Math.round(run.recommendedPrice).toLocaleString('de-DE')} ${run.currency ?? ''}`.trim() : 'N/D'}`,
-      `Tarifa recomendada: ${recommended?.fareName ?? 'N/D'}`,
-      recommended?.outboundSummary ? `Ida recomendada: ${recommended.outboundSummary}` : undefined,
-      recommended?.inboundSummary ? `Vuelta recomendada: ${recommended.inboundSummary}` : undefined,
-    ].filter((line): line is string => line !== undefined).join('\n');
+      title,
+      `${flight.flightNumber} | ${flight.origin} → ${flight.destination}`,
+      this.displayDateTime(flight.dateTime),
+    ];
+  }
+
+  private parseFlightSummary(summary?: string): { flightNumber: string; origin: string; destination: string; dateTime: string } | null {
+    const match = /^(\S+)\s+([A-Z]{3})-([A-Z]{3})\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/.exec(summary ?? '');
+    if (!match) {
+      return null;
+    }
+    return {
+      flightNumber: match[1],
+      origin: match[2],
+      destination: match[3],
+      dateTime: match[4],
+    };
+  }
+
+  private displayDateTime(value: string): string {
+    const [date, time] = value.split('T');
+    if (!date || !time) {
+      return value;
+    }
+    const [year, month, day] = date.split('-');
+    return `${day}/${month}/${year} ${time.slice(0, 5)}`;
   }
 
   private airportPrompt(label: 'Origen' | 'Destino'): string {

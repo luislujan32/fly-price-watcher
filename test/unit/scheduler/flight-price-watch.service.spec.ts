@@ -12,6 +12,7 @@ import { FlightAlert } from '../../../src/flight-alerts/domain/entities/flight-a
 import { FlightAlertType } from '../../../src/flight-alerts/domain/enums/flight-alert-type.enum';
 import { ListActiveFlightSearchesUseCase } from '../../../src/flight-searches/application/use-cases/list-active-flight-searches.use-case';
 import { FindFlightSearchByIdUseCase } from '../../../src/flight-searches/application/use-cases/find-flight-search-by-id.use-case';
+import { ManageFlightSearchesUseCase } from '../../../src/flight-searches/application/use-cases/manage-flight-searches.use-case';
 import { SaveFlightPriceSnapshotUseCase } from '../../../src/flight-prices/application/use-cases/save-flight-price-snapshot.use-case';
 import { EvaluateFlightAlertsUseCase } from '../../../src/flight-alerts/application/use-cases/evaluate-flight-alerts.use-case';
 import { NotificationService } from '../../../src/notifications/application/services/notification.service';
@@ -103,6 +104,14 @@ describe('FlightPriceWatchService', () => {
       execute: jest.fn().mockResolvedValue(watchRun),
       updateAlertsGenerated: jest.fn().mockResolvedValue(watchRun),
     };
+    const manageSearches = {
+      recordAutomaticNotification: jest.fn(async (item: FlightSearch, limit: number) => new FlightSearch({
+        ...item.toPrimitives(),
+        notificationCountSinceRenewal: item.notificationCountSinceRenewal + 1,
+        renewalLimit: limit,
+        requiresRenewal: item.notificationCountSinceRenewal + 1 >= limit,
+      })),
+    };
     const notifications = { send: jest.fn().mockResolvedValue({ attempts: 1, successes: 1, failures: 0 }) };
     const service = new FlightPriceWatchService(
       { execute: jest.fn().mockResolvedValue([search]) } as unknown as ListActiveFlightSearchesUseCase,
@@ -111,6 +120,7 @@ describe('FlightPriceWatchService', () => {
       saveSnapshot as unknown as SaveFlightPriceSnapshotUseCase,
       evaluateAlerts as unknown as EvaluateFlightAlertsUseCase,
       saveWatchRun as unknown as SaveFlightWatchRunUseCase,
+      manageSearches as unknown as ManageFlightSearchesUseCase,
       notifications as unknown as NotificationService,
       new AlertMessageFormatter(),
       {
@@ -121,12 +131,18 @@ describe('FlightPriceWatchService', () => {
           if (key === 'enableVerboseWatchLogs') {
             return enableVerboseWatchLogs;
           }
+          if (key === 'alertRenewalEnabled') {
+            return true;
+          }
+          if (key === 'alertRenewalNotificationLimit') {
+            return 5;
+          }
           return undefined;
         }),
       } as unknown as ConfigService,
     );
 
-    return { service, provider, saveSnapshot, evaluateAlerts, saveWatchRun, notifications };
+    return { service, provider, saveSnapshot, evaluateAlerts, saveWatchRun, manageSearches, notifications };
   }
 
   it('runs the watcher once and reports execution counters when snapshot persistence is enabled', async () => {
@@ -259,6 +275,30 @@ describe('FlightPriceWatchService', () => {
     expect(notifications.send).toHaveBeenCalledWith(expect.objectContaining({
       body: expect.stringContaining('✈️ AEP to MDZ'),
     }));
+  });
+
+  it('counts successful automatic alert notifications toward renewal', async () => {
+    const { service, manageSearches } = createFixture({
+      alertTypes: [FlightAlertType.DAILY_SUMMARY],
+    });
+
+    await service.runOnce();
+
+    expect(manageSearches.recordAutomaticNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'search-1' }),
+      5,
+      expect.any(Date),
+    );
+  });
+
+  it('does not count initial or manual summaries toward renewal', async () => {
+    const { service, manageSearches } = createFixture({
+      alertTypes: [FlightAlertType.DAILY_SUMMARY],
+    });
+
+    await service.runOnceForSearch('search-1', { sendInitialSummary: true, manual: true });
+
+    expect(manageSearches.recordAutomaticNotification).not.toHaveBeenCalled();
   });
 
   it('does not send notifications when there are no alerts', async () => {

@@ -67,7 +67,7 @@ export class AlertMessageFormatter {
       (currentRun.cheapestOptionCount ?? 0) > 1 ? `📌 Hay ${currentRun.cheapestOptionCount} opciones al precio mínimo.` : undefined,
       this.criteria(currentRun.cheapestPrice === currentRun.recommendedPrice),
       '',
-      'Filtros aplicados:',
+      '🔎 Filtros aplicados',
       allowStops ? '✅ Vuelos con escalas permitidos' : '✅ Solo vuelos directos',
       '✅ Aeropuerto exacto',
       allowStops
@@ -133,52 +133,75 @@ export class AlertMessageFormatter {
     isRoundTrip: boolean,
   ): string[] {
     if (!option) {
-      return ['Desglose recomendado:', 'Total: N/D'];
+      return ['💵 Desglose recomendado', '💰 Total: N/D'];
     }
     if (!isRoundTrip) {
-      return ['Desglose recomendado:', `Total: ${this.money(option.price, option.currency ?? currency)}`];
+      return ['💵 Desglose recomendado', `💰 Total: ${this.money(option.price, option.currency ?? currency)}`];
     }
     return [
-      'Desglose recomendado:',
-      `Ida: ${this.optionalMoney(option.outboundPrice, option.currency ?? currency)}`,
-      `Vuelta: ${this.optionalMoney(option.inboundPrice, option.currency ?? currency)}`,
-      `Total: ${this.money(option.price, option.currency ?? currency)}`,
+      '💵 Desglose recomendado',
+      `🛫 Ida: ${this.optionalMoney(option.outboundPrice, option.currency ?? currency)}`,
+      `🛬 Vuelta: ${this.optionalMoney(option.inboundPrice, option.currency ?? currency)}`,
+      `💰 Total: ${this.money(option.price, option.currency ?? currency)}`,
     ];
   }
 
   private legOptionsSection(label: 'Ida' | 'Vuelta', options: FlightLegOption[]): string[] {
+    const header = this.legOptionsHeader(label);
     if (!options.length) {
-      return [`${label} — vuelos válidos:`, 'N/D'];
+      return [...header, 'N/D'];
     }
 
     const sorted = this.sortLegOptions(options);
     const shown = sorted.slice(0, this.maxLegOptionsInAlert());
     const hiddenCount = Math.max(sorted.length - shown.length, 0);
     return [
-      `${label} — vuelos válidos:`,
-      ...shown.flatMap((option, index) => this.displayLegOption(option, index)),
+      ...header,
+      ...shown.flatMap((option, index) => [
+        ...this.displayLegOption(option, index),
+        index < shown.length - 1 ? '' : undefined,
+      ]),
       hiddenCount > 0 ? `Hay ${hiddenCount} vuelos válidos más no mostrados.` : undefined,
     ].filter((line): line is string => line !== undefined);
+  }
+
+  private legOptionsHeader(label: 'Ida' | 'Vuelta'): string[] {
+    const icon = label === 'Ida' ? '🛫' : '🛬';
+    return [
+      '━━━━━━━━━━━━━━',
+      `${icon} ${label} — vuelos válidos`,
+      '━━━━━━━━━━━━━━',
+    ];
   }
 
   private displayLegOption(option: FlightLegOption, index: number): string[] {
     const otherFares = (option.fares ?? [])
       .filter((fare) => fare.price !== this.legPrice(option) || fare.fareName !== (option.cheapestFareName ?? option.fareName))
       .map((fare) => `${fare.fareName ?? 'Tarifa'} ${this.money(fare.price, fare.currency)}`);
+    const marker = option.isRecommended ? '⭐ ' : '';
     return [
-      `${index + 1}. ${option.isRecommended ? '⭐ ' : ''}${option.flightNumber ?? 'Vuelo'} | ${option.origin ?? '?'} → ${option.destination ?? '?'}${option.hasStops ? ' 🔀 con escala' : ''}`,
-
-      `   ${this.displayLegTimes(option)}`,
-      `   Desde ${this.money(this.legPrice(option), option.currency)} | ${[
+      `${this.formatOptionNumber(index)} ${marker}${option.flightNumber ?? 'Vuelo'} | ${option.origin ?? '?'} → ${option.destination ?? '?'}${option.hasStops ? ' 🔀 con escala' : ''}`,
+      `📅 ${this.displayLegDate(option)}`,
+      `🕒 ${this.displayLegTimeRange(option)}`,
+      `💵 Desde ${this.money(this.legPrice(option), option.currency)} | ${[
         option.cheapestFareName ?? option.fareName ?? 'Tarifa N/D',
         option.isCheapest ? 'más barata' : undefined,
       ].filter(Boolean).join(' | ')}`,
-      otherFares.length ? `   Otras tarifas: ${otherFares.join(', ')}` : undefined,
+      otherFares.length ? `🏷️ Otras tarifas: ${otherFares.join(', ')}` : undefined,
     ].filter((line): line is string => line !== undefined);
   }
 
-  private displayLegTimes(option: FlightLegOption): string {
-    const departure = option.departureDateTime ? this.displayDateTime(option.departureDateTime) : 'N/D';
+  private formatOptionNumber(index: number): string {
+    const numbers = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
+    return numbers[index] ?? `${index + 1}.`;
+  }
+
+  private displayLegDate(option: FlightLegOption): string {
+    return option.departureDateTime ? this.displayDateOnly(option.departureDateTime) : 'N/D';
+  }
+
+  private displayLegTimeRange(option: FlightLegOption): string {
+    const departure = option.departureDateTime ? this.displayTime(option.departureDateTime) : 'N/D';
     const arrival = option.arrivalDateTime ? this.displayTime(option.arrivalDateTime) : undefined;
     return arrival ? `${departure} → ${arrival}` : departure;
   }
@@ -220,6 +243,15 @@ export class AlertMessageFormatter {
     }
     const [year, month, day] = date.split('-');
     return `${day}/${month}/${year} ${time.slice(0, 5)}`;
+  }
+
+  private displayDateOnly(value: string): string {
+    const [date] = value.split('T');
+    if (!date) {
+      return value;
+    }
+    const [year, month, day] = date.split('-');
+    return `${day}/${month}/${year}`;
   }
 
   private displayTime(value: string): string {

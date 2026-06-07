@@ -8,8 +8,8 @@ coverage
 .env.production
 .env.*.local
 !.env.example
-!.env.local.example
-!.env.production.example
+
+context
 
 npm-debug.log*
 yarn-debug.log*
@@ -19,3 +19,4 @@ pnpm-debug.log*
 *.tmp
 tmp
 temp
+context

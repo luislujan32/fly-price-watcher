@@ -3,6 +3,14 @@ import { Currency } from '../enums/currency.enum';
 import { TripType } from '../enums/trip-type.enum';
 import { FlightProviderCode } from '../../../flight-providers/domain/enums/flight-provider-code.enum';
 
+export enum FlightSearchPausedReason {
+  USER_PAUSED = 'user_paused',
+  RENEWAL_REQUIRED = 'renewal_required',
+  TRIP_EXPIRED = 'trip_expired',
+  DELIVERY_FAILED = 'delivery_failed',
+  PURCHASED = 'purchased',
+}
+
 export type FlightSearchProps = {
   id?: string;
   name: string;
@@ -22,6 +30,12 @@ export type FlightSearchProps = {
   notifyOnPriceDrop: boolean;
   notifyAlways: boolean;
   isActive: boolean;
+  notificationCountSinceRenewal?: number;
+  renewalLimit?: number;
+  requiresRenewal?: boolean;
+  renewalRequestedAt?: Date;
+  pausedReason?: FlightSearchPausedReason;
+  lastManualWatchAt?: Date;
   deletedAt?: Date;
   createdAt?: Date;
   updatedAt?: Date;
@@ -102,11 +116,39 @@ export class FlightSearch {
     return this.props.isActive;
   }
 
+  get notificationCountSinceRenewal(): number {
+    return this.props.notificationCountSinceRenewal ?? 0;
+  }
+
+  get renewalLimit(): number | undefined {
+    return this.props.renewalLimit;
+  }
+
+  get requiresRenewal(): boolean {
+    return this.props.requiresRenewal ?? false;
+  }
+
+  get renewalRequestedAt(): Date | undefined {
+    return this.props.renewalRequestedAt;
+  }
+
+  get pausedReason(): FlightSearchPausedReason | undefined {
+    return this.props.pausedReason;
+  }
+
+  get lastManualWatchAt(): Date | undefined {
+    return this.props.lastManualWatchAt;
+  }
+
   get deletedAt(): Date | undefined {
     return this.props.deletedAt;
   }
 
   toPrimitives(): FlightSearchProps {
-    return { ...this.props };
+    return {
+      ...this.props,
+      notificationCountSinceRenewal: this.notificationCountSinceRenewal,
+      requiresRenewal: this.requiresRenewal,
+    };
   }
 }

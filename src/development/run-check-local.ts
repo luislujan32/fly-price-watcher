@@ -5,6 +5,7 @@ import { getConnectionToken } from '@nestjs/mongoose';
 import { NestFactory } from '@nestjs/core';
 import { Connection } from 'mongoose';
 import { appConfig } from '../shared/config/app.config';
+import { timezoneValidationErrors } from '../shared/config/cron.config';
 import { resolveNestLogLevels } from '../shared/config/logger.config';
 import { buildSystemCheckLines, buildSystemCheckStatus } from '../shared/config/system-check.formatter';
 import { DatabaseModule } from '../shared/database/database.module';
@@ -39,6 +40,9 @@ async function run(): Promise<void> {
     const allowedChatCount = (config.get<string[]>('telegramAllowedChatIds') ?? []).length;
     const adminChatCount = (config.get<string[]>('telegramAdminChatIds') ?? []).length;
     const accessMode = config.get<string>('telegramAccessMode') ?? 'approval';
+    const appTimezone = config.get<string>('appTimezone') ?? 'America/Argentina/Buenos_Aires';
+
+    errors.push(...timezoneValidationErrors(appTimezone));
 
     if (enableScheduler) {
       if (!config.get<string>('dailyCron')) {

@@ -18,50 +18,118 @@ Bot para monitorear precios de vuelos y recibir alertas por Telegram.
 - MongoDB.
 - Bot de Telegram.
 
-## Setup Local Rápido
+## Estrategia De Configuración
 
-1. Copiar env:
+Hay una sola plantilla versionada:
 
-```bash
-cp .env.local.example .env
-```
+- `.env.example`: plantilla segura, sin tokens ni chat IDs reales.
 
-2. Editar `.env`:
+Archivos reales no versionados:
 
-```bash
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_ADMIN_CHAT_IDS=
-TELEGRAM_CHAT_ID=
-```
+- `.env`: configuración local.
+- `.env.production`: configuración de beta/producción en VPS.
 
-3. Instalar dependencias:
+No subas `.env` ni `.env.production` a Git.
+
+## Setup Local Desde Cero
 
 ```bash
+cp .env.example .env
 npm install
+docker compose up -d mongo
+npm run check:local
+npm run start:local
 ```
 
-4. Levantar Mongo:
+Editá `.env` antes de iniciar si vas a usar Telegram/Aerolíneas:
+
+```bash
+ENABLE_TELEGRAM_BOT=true
+ENABLED_FLIGHT_PROVIDERS=AEROLINEAS_ARGENTINAS
+NOTIFICATION_CHANNELS=console,telegram
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+TELEGRAM_ADMIN_CHAT_IDS=
+```
+
+````md
+Para siguientes ejecuciones, normalmente alcanza con:
 
 ```bash
 docker compose up -d mongo
-```
-
-5. Validar configuración:
-
-```bash
-npm run check:local
-```
-
-6. Levantar la app:
-
-```bash
 npm run start:local
+```
+````
+
+## Producción Beta En VPS
+
+Preparar env:
+
+```bash
+cp .env.example .env.production
+```
+
+Editar `.env.production` con valores reales. Para beta con Docker Compose y Mongo del compose, usar:
+
+```bash
+NODE_ENV=production
+MONGODB_URI=mongodb://mongo:27017/flight-price-watcher
+ENABLE_TELEGRAM_BOT=true
+ENABLE_SCHEDULER=true
+DAILY_RUN_TIME=08:00
+APP_TIMEZONE=America/Argentina/Buenos_Aires
+ENABLED_FLIGHT_PROVIDERS=AEROLINEAS_ARGENTINAS
+NOTIFICATION_CHANNELS=telegram
+TELEGRAM_ACCESS_MODE=approval
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+TELEGRAM_ADMIN_CHAT_IDS=
+```
+
+Mongo no se expone públicamente en `docker-compose.prod.yml`. El bot usa polling, así que no necesita dominio ni HTTPS para esta beta.
+
+Setup inicial:
+
+```bash
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml run --rm app npm run setup:prod
+docker compose -f docker-compose.prod.yml run --rm app npm run check:prod
+```
+
+Levantar producción:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Parar:
+
+```bash
+docker compose -f docker-compose.prod.yml down
+```
+
+Ver logs:
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f app
+docker compose -f docker-compose.prod.yml logs -f mongo
+```
+
+Actualizar después de `git pull`:
+
+```bash
+git pull
+docker compose -f docker-compose.prod.yml build app
+docker compose -f docker-compose.prod.yml run --rm app npm run setup:prod
+docker compose -f docker-compose.prod.yml up -d app
+docker compose -f docker-compose.prod.yml logs -f app
 ```
 
 ## Comandos Principales
 
-| Comando | Uso |
-|---|---|
+| Comando               | Uso                                                 |
+| --------------------- | --------------------------------------------------- |
+| `npm run check:local` | Valida configuración local                          |
 | `npm run start:local` | Levanta la app local con bot/scheduler según `.env` |
 | `npm run dev:all` | Alias de `start:local` |
 | `npm run check:local` | Valida configuración local |
@@ -82,9 +150,9 @@ npm run start:local
 | `npm test` | Ejecuta tests |
 | `npm run build` | Compila TypeScript |
 
-## Variables Importantes
+## Variables
 
-No están todas listadas acá. Usá `.env.local.example` y `.env.production.example` como fuente completa.
+Copiá `.env.example` y completá los valores necesarios.
 
 - `MONGODB_URI`: conexión Mongo.
 - `ENABLE_TELEGRAM_BOT`: activa polling del bot.
@@ -101,30 +169,44 @@ No están todas listadas acá. Usá `.env.local.example` y `.env.production.exam
 - `TELEGRAM_HTTP_RETRIES`: reintentos cortos para Telegram.
 - `JETSMART_TEST_DEPARTURE`: fecha opcional para `npm run jetsmart:test` (si no está, se usa una fecha futura relativa).
 
-## Archivos Env
+- `MONGODB_URI`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `TELEGRAM_ADMIN_CHAT_IDS`
+- `APP_TIMEZONE`
+- `MANUAL_WATCH_COOLDOWN_MINUTES`
+- `ALERT_RENEWAL_NOTIFICATION_LIMIT`
 
-- `.env`: archivo real de ejecución local. No se commitea.
-- `.env.example`: plantilla segura y genérica.
-- `.env.local.example`: plantilla recomendada para desarrollo local real.
-- `.env.production.example`: plantilla recomendada para producción.
+Las demás variables mínimas ya vienen con valores razonables en la plantilla.
 
-La app carga `.env` por defecto mediante `ConfigModule`.
+## Horario Del Scheduler
+
+```bash
+DAILY_RUN_TIME=08:00
+APP_TIMEZONE=America/Argentina/Buenos_Aires
+```
+
+Esto ejecuta el monitoreo a las 08:00 hora Argentina aunque el servidor esté en otra timezone. Si configurás `DAILY_CRON`, también se interpreta en `APP_TIMEZONE`.
+
+Para probar con una hora cercana, cambiá temporalmente `DAILY_RUN_TIME`, iniciá la app y dejala corriendo hasta ese horario.
 
 ## Flujo Telegram
 
 1. El usuario escribe `/start`.
-2. En modo `approval`, queda pendiente y se notifica a los admins.
-3. Un admin aprueba desde Telegram.
-4. El usuario usa `/crear` para crear una alerta.
-5. Si `RUN_WATCH_AFTER_CREATE=true`, el bot consulta el precio actual y manda un resumen inicial.
-6. El usuario usa `/listar` para ver alertas y botones de acción:
-   - Ver detalle.
-   - Pausar.
-   - Activar.
-   - Resumen.
-   - Borrar.
+2. En modo `approval`, queda pendiente.
+3. Un admin lo aprueba.
+4. El usuario crea una alerta con `/crear`.
+5. El bot consulta el precio inicial y luego monitorea diariamente.
 
-Comandos útiles:
+Desde `/listar` podés tocar `Ver` para abrir el detalle de una alerta. En el detalle aparecen botones para:
+
+- consultar ahora, con cooldown configurado por `MANUAL_WATCH_COOLDOWN_MINUTES`;
+- pausar, activar o borrar;
+- continuar monitoreando si la alerta quedó pausada por renovación.
+
+Si `ALERT_RENEWAL_ENABLED=true`, después de `ALERT_RENEWAL_NOTIFICATION_LIMIT` notificaciones automáticas para una misma alerta, el sistema la pausa y pregunta por Telegram si querés seguir monitoreando. Las consultas iniciales o manuales no cuentan para ese límite.
+
+Comandos principales:
 
 - `/start`
 - `/ayuda`
@@ -132,131 +214,18 @@ Comandos útiles:
 - `/listar`
 - `/estado`
 - `/cancelar`
-- `/mi_chat_id`
-
-Comandos admin:
-
-- `/usuarios`
-- `/pendientes`
-- `/sync_admins`
-- `/aprobar chatId`
-- `/rechazar chatId`
-- `/bloquear chatId`
 
 ## Diagnóstico
 
-Telegram:
-
 ```bash
+npm run check:local
 npm run telegram:debug-config
-npm run telegram:test
 npm run telegram:test-admin-notification
-```
-
-Aerolíneas:
-
-```bash
-ORIGIN=JUJ DESTINATION=AEP DEPARTURE_DATE=2026-10-10 RETURN_DATE=2026-10-15 TRIP_TYPE=ROUND_TRIP npm run aerolineas:test
-```
-
-Watcher manual:
-
-```bash
-npm run watch:once
-```
-
-Forzar resumen diario sólo para diagnóstico:
-
-```bash
-FORCE_DAILY_SUMMARY=true npm run watch:once
-```
-
-## Producción
-
-1. Copiar plantilla:
-
-```bash
-cp .env.production.example .env
-```
-
-2. Completar variables reales:
-
-```bash
-MONGODB_URI=
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
-TELEGRAM_ADMIN_CHAT_IDS=
-```
-
-3. Compilar:
-
-```bash
-npm run build
-```
-
-4. Setup inicial:
-
-```bash
-npm run setup:prod
-```
-
-5. Levantar:
-
-```bash
-npm run start:prod
-```
-
-Con Docker:
-
-```bash
-docker compose build
-docker compose up -d mongo
-docker compose run --rm app npm run setup:prod
-docker compose up -d app
-```
-
-Mongo no se expone públicamente; `docker-compose.yml` lo publica sólo en `127.0.0.1`.
-
-## Seed
-
-El seed crea/actualiza búsquedas reales configuradas por env. Requiere `SEED_TELEGRAM_CHAT_ID`.
-
-```bash
-SEED_TELEGRAM_CHAT_ID=chat-id npm run seed
-```
-
-La demo `BUE to MDZ example` sólo se crea activa si:
-
-```bash
-ENABLE_DEMO_SEED=true
 ```
 
 ## Notas De Seguridad
 
-- No commitear `.env`.
+- No commitear `.env` ni `.env.production`.
 - No subir tokens ni chat IDs reales.
 - Usar `TELEGRAM_ACCESS_MODE=approval` para beta cerrada.
 - `TELEGRAM_ADMIN_CHAT_IDS` es la fuente de verdad para permisos admin.
-- Si un admin existía como usuario legacy, ejecutar `/sync_admins`.
-- Los logs y checks enmascaran valores sensibles.
-
-## Mantenimiento
-
-Sincronizar índices:
-
-```bash
-npm run db:sync-indexes
-```
-
-Migrar búsquedas legacy sin `telegramChatId`:
-
-```bash
-MIGRATE_TELEGRAM_CHAT_ID=chat-id npm run migrate:telegram-chat-id
-```
-
-Limpiar base local de pruebas, si hace falta:
-
-```bash
-docker compose down -v
-docker compose up -d mongo
-```

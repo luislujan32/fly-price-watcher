@@ -23,12 +23,16 @@ describe('system check formatter', () => {
       telegramLegacyAllowedChatConfigured: true,
       telegramDefaultChatConfigured: true,
       enableScheduler: true,
+      appTimezone: 'America/Argentina/Buenos_Aires',
       dailyRunTime: '08:00',
       dailyCron: '0 8 * * *',
       enabledFlightProviders: ['AEROLINEAS_ARGENTINAS'],
       notificationChannels: ['console', 'telegram'],
       forceDailySummary: true,
       runWatchAfterCreate: true,
+      manualWatchCooldownMinutes: 10,
+      alertRenewalEnabled: true,
+      alertRenewalNotificationLimit: 5,
       maxSearchesPerUser: 5,
     });
 
@@ -40,9 +44,13 @@ describe('system check formatter', () => {
     expect(lines).toContain('Telegram legacy single allowed chat: configured');
     expect(lines).toContain('Telegram default notification chat: configured');
     expect(lines).toContain('Run watch after create: enabled');
+    expect(lines).toContain('Manual watch cooldown: 10 minutes');
+    expect(lines).toContain('Alert renewal: enabled after 5 notifications');
     expect(lines).toContain('Max searches per user: 5');
+    expect(lines).toContain('App timezone: America/Argentina/Buenos_Aires');
     expect(lines).toContain('Daily run time: 08:00');
     expect(lines).toContain('Effective cron: 0 8 * * *');
+    expect(lines).toContain('La ejecución se interpreta en APP_TIMEZONE, no en la timezone del servidor.');
     expect(lines).toContain('Force daily summary: enabled - diagnostic mode');
   });
 
@@ -56,12 +64,16 @@ describe('system check formatter', () => {
         telegramAllowedChatId: '123456789',
         telegramChatId: '111111111',
         enableScheduler: true,
+        appTimezone: 'America/Argentina/Buenos_Aires',
         dailyRunTime: '08:00',
         dailyCron: '0 8 * * *',
         enabledFlightProviders: ['FAKE'],
         notificationChannels: ['console'],
         forceDailySummary: false,
         runWatchAfterCreate: true,
+        manualWatchCooldownMinutes: 10,
+        alertRenewalEnabled: true,
+        alertRenewalNotificationLimit: 5,
         maxSearchesPerUser: 5,
       })[key]),
     } as unknown as ConfigService;
@@ -76,12 +88,16 @@ describe('system check formatter', () => {
       telegramLegacyAllowedChatConfigured: true,
       telegramDefaultChatConfigured: true,
       enableScheduler: true,
+      appTimezone: 'America/Argentina/Buenos_Aires',
       dailyRunTime: '08:00',
       dailyCron: '0 8 * * *',
       enabledFlightProviders: ['FAKE'],
       notificationChannels: ['console'],
       forceDailySummary: false,
       runWatchAfterCreate: true,
+      manualWatchCooldownMinutes: 10,
+      alertRenewalEnabled: true,
+      alertRenewalNotificationLimit: 5,
       maxSearchesPerUser: 5,
     });
   });

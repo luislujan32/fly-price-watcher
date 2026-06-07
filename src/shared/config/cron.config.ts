@@ -1,4 +1,10 @@
 const DEFAULT_DAILY_RUN_TIME = '08:00';
+export const DEFAULT_APP_TIMEZONE = 'America/Argentina/Buenos_Aires';
+
+export type DailyScheduleConfig = {
+  cron: string;
+  timeZone: string;
+};
 
 export function resolveDailyRunTime(env: NodeJS.ProcessEnv = process.env): string {
   return env.DAILY_RUN_TIME?.trim() || DEFAULT_DAILY_RUN_TIME;
@@ -21,4 +27,35 @@ export function resolveDailyCronExpression(env: NodeJS.ProcessEnv = process.env)
   }
 
   return dailyCronFromRunTime(resolveDailyRunTime(env));
+}
+
+export function resolveAppTimezone(env: NodeJS.ProcessEnv = process.env): string {
+  return env.APP_TIMEZONE?.trim() || DEFAULT_APP_TIMEZONE;
+}
+
+export function isValidTimezone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone }).format();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function timezoneValidationErrors(timeZone: string): string[] {
+  return isValidTimezone(timeZone)
+    ? []
+    : [`APP_TIMEZONE "${timeZone}" is invalid. Use a valid IANA timezone, for example ${DEFAULT_APP_TIMEZONE}.`];
+}
+
+export function resolveDailySchedule(env: NodeJS.ProcessEnv = process.env): DailyScheduleConfig {
+  const timeZone = resolveAppTimezone(env);
+  const [timezoneError] = timezoneValidationErrors(timeZone);
+  if (timezoneError) {
+    throw new Error(timezoneError);
+  }
+  return {
+    cron: resolveDailyCronExpression(env),
+    timeZone,
+  };
 }

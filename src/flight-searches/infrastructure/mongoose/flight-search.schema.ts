@@ -4,6 +4,7 @@ import { CabinClass } from '../../domain/enums/cabin-class.enum';
 import { Currency } from '../../domain/enums/currency.enum';
 import { TripType } from '../../domain/enums/trip-type.enum';
 import { FlightProviderCode } from '../../../flight-providers/domain/enums/flight-provider-code.enum';
+import { FlightSearchPausedReason } from '../../domain/entities/flight-search.entity';
 
 export type FlightSearchDocument = HydratedDocument<FlightSearchModel>;
 
@@ -59,6 +60,24 @@ export class FlightSearchModel {
 
   @Prop({ required: true, default: true })
   isActive: boolean;
+
+  @Prop({ required: true, default: 0, min: 0 })
+  notificationCountSinceRenewal: number;
+
+  @Prop({ min: 1 })
+  renewalLimit?: number;
+
+  @Prop({ required: true, default: false, index: true })
+  requiresRenewal: boolean;
+
+  @Prop()
+  renewalRequestedAt?: Date;
+
+  @Prop({ enum: FlightSearchPausedReason })
+  pausedReason?: FlightSearchPausedReason;
+
+  @Prop()
+  lastManualWatchAt?: Date;
 
   @Prop({ index: true })
   deletedAt?: Date;
