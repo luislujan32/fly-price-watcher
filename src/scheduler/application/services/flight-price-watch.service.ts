@@ -8,6 +8,7 @@ import { FlightQuery } from '../../../flight-providers/domain/models/flight-quer
 import { FlightQuote, FlightQuoteSegment } from '../../../flight-providers/domain/models/flight-quote.model';
 import { FindFlightSearchByIdUseCase } from '../../../flight-searches/application/use-cases/find-flight-search-by-id.use-case';
 import { ListActiveFlightSearchesUseCase } from '../../../flight-searches/application/use-cases/list-active-flight-searches.use-case';
+import { ManageFlightSearchesUseCase } from '../../../flight-searches/application/use-cases/manage-flight-searches.use-case';
 import { FlightSearch } from '../../../flight-searches/domain/entities/flight-search.entity';
 import { SaveFlightWatchRunUseCase } from '../../../flight-watch-runs/application/use-cases/save-flight-watch-run.use-case';
 import { FlightWatchRun } from '../../../flight-watch-runs/domain/entities/flight-watch-run.entity';
@@ -36,6 +37,7 @@ export type FlightPriceWatchRunResult = {
 
 export type RunOnceForSearchOptions = {
   sendInitialSummary?: boolean;
+  manual?: boolean;
 };
 
 @Injectable()
@@ -49,6 +51,7 @@ export class FlightPriceWatchService {
     private readonly saveSnapshot: SaveFlightPriceSnapshotUseCase,
     private readonly evaluateAlerts: EvaluateFlightAlertsUseCase,
     private readonly saveWatchRun: SaveFlightWatchRunUseCase,
+    private readonly manageSearches: ManageFlightSearchesUseCase,
     private readonly notifications: NotificationService,
     private readonly alertMessages: AlertMessageFormatter,
     private readonly config: ConfigService,
@@ -257,6 +260,10 @@ export class FlightPriceWatchService {
               result.notificationSuccesses += notificationResult.successes;
               result.notificationFailures += notificationResult.failures;
               result.notificationsSent = result.notificationSuccesses;
+
+              if (notificationResult.successes > 0 && this.shouldCountRenewalNotification(options)) {
+                await this.recordRenewalNotification(search, currentRun);
+              }
             }
 
             if (currentRun.id) {
@@ -374,6 +381,93 @@ export class FlightPriceWatchService {
       return value;
     }
     return process.env.ENABLE_VERBOSE_WATCH_LOGS === 'true';
+  }
+
+  private shouldCountRenewalNotification(options: RunOnceForSearchOptions): boolean {
+    if (options.sendInitialSummary || options.manual) {
+      return false;
+    }
+    const enabled = this.config.get<boolean>('alertRenewalEnabled');
+    return typeof enabled === 'boolean' ? enabled : process.env.ALERT_RENEWAL_ENABLED !== 'false';
+  }
+
+  private renewalNotificationLimit(): number {
+    const value = this.config.get<number>('alertRenewalNotificationLimit') ?? 5;
+    return Number.isFinite(value) && value > 0 ? value : 5;
+  }
+
+  private async recordRenewalNotification(search: FlightSearch, currentRun: FlightWatchRun): Promise<void> {
+    const limit = this.renewalNotificationLimit();
+    const previousCount = search.notificationCountSinceRenewal;
+    const updated = await this.manageSearches.recordAutomaticNotification(search, limit, new Date());
+    const currentCount = previousCount + 1;
+    this.logger.log(`Alert lifecycle notification count: search="${search.name}", count=${currentCount}/${limit}.`);
+
+    if (currentCount >= limit && updated?.requiresRenewal) {
+      await this.sendRenewalPrompt(updated, currentRun, limit);
+    }
+  }
+
+  private async sendRenewalPrompt(search: FlightSearch, currentRun: FlightWatchRun, limit: number): Promise<void> {
+    if (!search.id || !search.telegramChatId) {
+      this.logger.warn(`Renewal prompt skipped for search=${search.id ?? 'unknown'} because telegramChatId is missing.`);
+      return;
+    }
+
+    const notificationResult = await this.notifications.send({
+      title: '',
+      body: this.renewalPromptMessage(search, currentRun, limit),
+      metadata: {
+        searchId: search.id,
+        providerCode: currentRun.providerCode,
+        ...(currentRun.id ? { runId: currentRun.id } : {}),
+        telegramChatId: search.telegramChatId,
+        notificationType: 'RENEWAL_PROMPT',
+      },
+      replyMarkup: {
+        inline_keyboard: [
+          [{ text: '✅ Sí, seguir monitoreando', callback_data: `renewal:continue:${search.id}` }],
+          [{ text: '⏸ Mantener pausada', callback_data: `renewal:pause:${search.id}` }],
+          [{ text: '🗑 Borrar alerta', callback_data: `renewal:delete:${search.id}` }],
+          [{ text: '✅ Ya compré', callback_data: `renewal:purchased:${search.id}` }],
+        ],
+      },
+    });
+
+    this.logger.log(
+      `Renewal prompt sent for search=${search.id}: attempts=${notificationResult.attempts}, successes=${notificationResult.successes}, failures=${notificationResult.failures}.`,
+    );
+  }
+
+  private renewalPromptMessage(search: FlightSearch, currentRun: FlightWatchRun, limit: number): string {
+    return [
+      '🔔 ¿Seguimos monitoreando?',
+      '',
+      `Te envié ${limit} notificaciones para esta alerta:`,
+      '',
+      `✈️ ${search.name}`,
+      this.routeForMessage(search, currentRun),
+      this.datesForMessage(search),
+      '',
+      '¿Querés seguir recibiendo avisos?',
+    ].join('\n');
+  }
+
+  private routeForMessage(search: FlightSearch, currentRun: FlightWatchRun): string {
+    const [origin, destination] = (currentRun.route || `${search.origin}-${search.destination}`).split('-');
+    if (search.returnDate && origin && destination) {
+      return `${origin} → ${destination} → ${origin}`;
+    }
+    return origin && destination ? `${origin} → ${destination}` : `${search.origin} → ${search.destination}`;
+  }
+
+  private datesForMessage(search: FlightSearch): string {
+    return `${this.displayDate(search.departureDate)}${search.returnDate ? ` al ${this.displayDate(search.returnDate)}` : ''}`;
+  }
+
+  private displayDate(value: Date): string {
+    const [year, month, day] = value.toISOString().slice(0, 10).split('-');
+    return `${day}/${month}/${year}`;
   }
 
   private logRunSummary(params: {

@@ -10,12 +10,16 @@ export type SystemCheckStatus = {
   telegramLegacyAllowedChatConfigured: boolean;
   telegramDefaultChatConfigured: boolean;
   enableScheduler: boolean;
+  appTimezone: string;
   dailyRunTime?: string;
   dailyCron?: string;
   enabledFlightProviders: string[];
   notificationChannels: string[];
   forceDailySummary: boolean;
   runWatchAfterCreate: boolean;
+  manualWatchCooldownMinutes: number;
+  alertRenewalEnabled: boolean;
+  alertRenewalNotificationLimit: number;
   maxSearchesPerUser: number;
 };
 
@@ -30,10 +34,14 @@ export function buildSystemCheckLines(status: SystemCheckStatus): string[] {
     `Telegram legacy single allowed chat: ${status.telegramLegacyAllowedChatConfigured ? 'configured' : 'not configured'}`,
     `Telegram default notification chat: ${status.telegramDefaultChatConfigured ? 'configured' : 'not configured'}`,
     `Run watch after create: ${status.runWatchAfterCreate ? 'enabled' : 'disabled'}`,
+    `Manual watch cooldown: ${status.manualWatchCooldownMinutes} minutes`,
+    `Alert renewal: ${status.alertRenewalEnabled ? `enabled after ${status.alertRenewalNotificationLimit} notifications` : 'disabled'}`,
     `Max searches per user: ${status.maxSearchesPerUser}`,
     `Scheduler: ${status.enableScheduler ? 'enabled' : 'disabled'}`,
+    `App timezone: ${status.appTimezone}`,
     `Daily run time: ${status.dailyRunTime ?? '08:00'}`,
     `Effective cron: ${status.dailyCron ?? 'not configured'}`,
+    'La ejecución se interpreta en APP_TIMEZONE, no en la timezone del servidor.',
     `Providers: ${formatList(status.enabledFlightProviders)}`,
     `Notification channels: ${formatList(status.notificationChannels)}`,
     `Force daily summary: ${status.forceDailySummary ? 'enabled - diagnostic mode' : 'disabled'}`,
@@ -51,12 +59,16 @@ export function buildSystemCheckStatus(config: ConfigService, mongoStatus: strin
     telegramLegacyAllowedChatConfigured: Boolean(config.get<string>('telegramAllowedChatId')),
     telegramDefaultChatConfigured: Boolean(config.get<string>('telegramChatId')),
     enableScheduler: config.get<boolean>('enableScheduler') === true,
+    appTimezone: config.get<string>('appTimezone') ?? 'America/Argentina/Buenos_Aires',
     dailyRunTime: config.get<string>('dailyRunTime'),
     dailyCron: config.get<string>('dailyCron'),
     enabledFlightProviders: config.get<string[]>('enabledFlightProviders') ?? [],
     notificationChannels: config.get<string[]>('notificationChannels') ?? [],
     forceDailySummary: config.get<boolean>('forceDailySummary') === true,
     runWatchAfterCreate: config.get<boolean>('runWatchAfterCreate') === true,
+    manualWatchCooldownMinutes: config.get<number>('manualWatchCooldownMinutes') ?? 10,
+    alertRenewalEnabled: config.get<boolean>('alertRenewalEnabled') !== false,
+    alertRenewalNotificationLimit: config.get<number>('alertRenewalNotificationLimit') ?? 5,
     maxSearchesPerUser: config.get<number>('maxSearchesPerUser') ?? 5,
   };
 }

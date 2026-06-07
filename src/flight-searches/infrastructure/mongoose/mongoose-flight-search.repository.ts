@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model } from 'mongoose';
-import { FlightSearch } from '../../domain/entities/flight-search.entity';
-import { FlightSearchRepository } from '../../domain/repositories/flight-search.repository';
+import { FlightSearch, FlightSearchPausedReason } from '../../domain/entities/flight-search.entity';
+import { FlightSearchLifecycleUpdate, FlightSearchRepository } from '../../domain/repositories/flight-search.repository';
 import { FlightSearchModel } from './flight-search.schema';
 
 @Injectable()
@@ -39,9 +39,41 @@ export class MongooseFlightSearchRepository implements FlightSearchRepository {
   }
 
   async updateActiveById(id: string, isActive: boolean, telegramChatId: string): Promise<FlightSearch | null> {
+    const update = isActive
+      ? this.lifecycleUpdate({
+        isActive: true,
+        notificationCountSinceRenewal: 0,
+        requiresRenewal: false,
+        renewalRequestedAt: null,
+        pausedReason: null,
+      })
+      : this.lifecycleUpdate({
+        isActive: false,
+        requiresRenewal: false,
+        renewalRequestedAt: null,
+        pausedReason: FlightSearchPausedReason.USER_PAUSED,
+      });
     const updated = await this.model.findOneAndUpdate(
       this.manageableByIdFilter(id, telegramChatId),
-      { $set: { isActive } },
+      update,
+      { new: true },
+    ).exec();
+    return updated ? this.toEntity(updated) : null;
+  }
+
+  async updateLifecycleById(id: string, updates: FlightSearchLifecycleUpdate): Promise<FlightSearch | null> {
+    const updated = await this.model.findByIdAndUpdate(
+      id,
+      this.lifecycleUpdate(updates),
+      { new: true },
+    ).exec();
+    return updated ? this.toEntity(updated) : null;
+  }
+
+  async updateLifecycleByIdForChat(id: string, telegramChatId: string, updates: FlightSearchLifecycleUpdate): Promise<FlightSearch | null> {
+    const updated = await this.model.findOneAndUpdate(
+      this.manageableByIdFilter(id, telegramChatId),
+      this.lifecycleUpdate(updates),
       { new: true },
     ).exec();
     return updated ? this.toEntity(updated) : null;
@@ -50,7 +82,7 @@ export class MongooseFlightSearchRepository implements FlightSearchRepository {
   async softDeleteById(id: string, deletedAt: Date, telegramChatId: string): Promise<FlightSearch | null> {
     const updated = await this.model.findOneAndUpdate(
       this.manageableByIdFilter(id, telegramChatId),
-      { $set: { isActive: false, deletedAt } },
+      { $set: { isActive: false, deletedAt, pausedReason: FlightSearchPausedReason.USER_PAUSED } },
       { new: true },
     ).exec();
     return updated ? this.toEntity(updated) : null;
@@ -96,6 +128,11 @@ export class MongooseFlightSearchRepository implements FlightSearchRepository {
     return record ? this.toEntity(record) : null;
   }
 
+  async findByIdForChat(id: string, telegramChatId: string): Promise<FlightSearch | null> {
+    const record = await this.model.findOne(this.manageableByIdFilter(id, telegramChatId)).exec();
+    return record ? this.toEntity(record) : null;
+  }
+
   private toEntity(record: FlightSearchModel & { _id: unknown; createdAt?: Date; updatedAt?: Date }): FlightSearch {
     return new FlightSearch({
       id: String(record._id),
@@ -114,6 +151,12 @@ export class MongooseFlightSearchRepository implements FlightSearchRepository {
       notifyOnPriceDrop: record.notifyOnPriceDrop ?? true,
       notifyAlways: record.notifyAlways,
       isActive: record.isActive,
+      notificationCountSinceRenewal: record.notificationCountSinceRenewal,
+      renewalLimit: record.renewalLimit,
+      requiresRenewal: record.requiresRenewal,
+      renewalRequestedAt: record.renewalRequestedAt,
+      pausedReason: record.pausedReason,
+      lastManualWatchAt: record.lastManualWatchAt,
       deletedAt: record.deletedAt,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
@@ -142,5 +185,18 @@ export class MongooseFlightSearchRepository implements FlightSearchRepository {
         { telegramChatId: '' },
       ],
     };
+  }
+
+  private lifecycleUpdate(updates: FlightSearchLifecycleUpdate): { $set: Record<string, unknown>; $unset?: Record<string, ''> } {
+    const set: Record<string, unknown> = {};
+    const unset: Record<string, ''> = {};
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null) {
+        unset[key] = '';
+      } else if (value !== undefined) {
+        set[key] = value;
+      }
+    }
+    return Object.keys(unset).length ? { $set: set, $unset: unset } : { $set: set };
   }
 }

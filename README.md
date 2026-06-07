@@ -76,6 +76,8 @@ NODE_ENV=production
 MONGODB_URI=mongodb://mongo:27017/flight-price-watcher
 ENABLE_TELEGRAM_BOT=true
 ENABLE_SCHEDULER=true
+DAILY_RUN_TIME=08:00
+APP_TIMEZONE=America/Argentina/Buenos_Aires
 ENABLED_FLIGHT_PROVIDERS=AEROLINEAS_ARGENTINAS
 NOTIFICATION_CHANNELS=telegram
 TELEGRAM_ACCESS_MODE=approval
@@ -144,8 +146,22 @@ Para beta real necesitás configurar principalmente:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 - `TELEGRAM_ADMIN_CHAT_IDS`
+- `APP_TIMEZONE`
+- `MANUAL_WATCH_COOLDOWN_MINUTES`
+- `ALERT_RENEWAL_NOTIFICATION_LIMIT`
 
 Las demás variables mínimas ya vienen con valores razonables en la plantilla.
+
+## Horario Del Scheduler
+
+```bash
+DAILY_RUN_TIME=08:00
+APP_TIMEZONE=America/Argentina/Buenos_Aires
+```
+
+Esto ejecuta el monitoreo a las 08:00 hora Argentina aunque el servidor esté en otra timezone. Si configurás `DAILY_CRON`, también se interpreta en `APP_TIMEZONE`.
+
+Para probar con una hora cercana, cambiá temporalmente `DAILY_RUN_TIME`, iniciá la app y dejala corriendo hasta ese horario.
 
 ## Flujo Telegram
 
@@ -154,6 +170,14 @@ Las demás variables mínimas ya vienen con valores razonables en la plantilla.
 3. Un admin lo aprueba.
 4. El usuario crea una alerta con `/crear`.
 5. El bot consulta el precio inicial y luego monitorea diariamente.
+
+Desde `/listar` podés tocar `Ver` para abrir el detalle de una alerta. En el detalle aparecen botones para:
+
+- consultar ahora, con cooldown configurado por `MANUAL_WATCH_COOLDOWN_MINUTES`;
+- pausar, activar o borrar;
+- continuar monitoreando si la alerta quedó pausada por renovación.
+
+Si `ALERT_RENEWAL_ENABLED=true`, después de `ALERT_RENEWAL_NOTIFICATION_LIMIT` notificaciones automáticas para una misma alerta, el sistema la pausa y pregunta por Telegram si querés seguir monitoreando. Las consultas iniciales o manuales no cuentan para ese límite.
 
 Comandos principales:
 

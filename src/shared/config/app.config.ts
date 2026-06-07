@@ -1,4 +1,4 @@
-import { resolveDailyCronExpression, resolveDailyRunTime } from './cron.config';
+import { resolveAppTimezone, resolveDailyCronExpression, resolveDailyRunTime } from './cron.config';
 import { parseTelegramAdminChatIds, parseTelegramAllowedChatIds } from './telegram-access.config';
 
 export const appConfig = () => ({
@@ -10,6 +10,7 @@ export const appConfig = () => ({
   mongodbUri: process.env.MONGODB_URI ?? 'mongodb://localhost:27017/flight-price-watcher',
   enableScheduler: process.env.ENABLE_SCHEDULER !== 'false',
   enableTelegramBot: process.env.ENABLE_TELEGRAM_BOT === 'true',
+  appTimezone: resolveAppTimezone(),
   dailyRunTime: resolveDailyRunTime(),
   dailyCron: resolveDailyCronExpression(),
   enabledFlightProviders: (process.env.ENABLED_FLIGHT_PROVIDERS ?? 'FAKE')
@@ -33,6 +34,9 @@ export const appConfig = () => ({
   telegramWizardTtlMinutes: Number(process.env.TELEGRAM_WIZARD_TTL_MINUTES ?? 15),
   runWatchAfterCreate: process.env.RUN_WATCH_AFTER_CREATE !== 'false',
   maxSearchesPerUser: Number(process.env.MAX_SEARCHES_PER_USER ?? 5),
+  manualWatchCooldownMinutes: Number(process.env.MANUAL_WATCH_COOLDOWN_MINUTES ?? 10),
+  alertRenewalEnabled: process.env.ALERT_RENEWAL_ENABLED !== 'false',
+  alertRenewalNotificationLimit: Number(process.env.ALERT_RENEWAL_NOTIFICATION_LIMIT ?? 5),
   forceDailySummary: process.env.FORCE_DAILY_SUMMARY === 'true',
   persistPriceSnapshots: process.env.PERSIST_PRICE_SNAPSHOTS === 'true',
   persistProviderDiagnostics: process.env.PERSIST_PROVIDER_DIAGNOSTICS === 'true',

@@ -1,5 +1,5 @@
 import { ManageFlightSearchesUseCase } from '../../../src/flight-searches/application/use-cases/manage-flight-searches.use-case';
-import { FlightSearch } from '../../../src/flight-searches/domain/entities/flight-search.entity';
+import { FlightSearch, FlightSearchPausedReason } from '../../../src/flight-searches/domain/entities/flight-search.entity';
 import { FlightSearchRepository } from '../../../src/flight-searches/domain/repositories/flight-search.repository';
 import { CabinClass } from '../../../src/flight-searches/domain/enums/cabin-class.enum';
 import { Currency } from '../../../src/flight-searches/domain/enums/currency.enum';
@@ -39,6 +39,36 @@ describe('ManageFlightSearchesUseCase', () => {
 
     expect(repository.softDeleteById).toHaveBeenCalledWith('search-1', expect.any(Date), '123');
   });
+
+  it('renews a paused search and resets renewal counters', async () => {
+    const { useCase, repository } = fixture([search({ isActive: false, requiresRenewal: true, notificationCountSinceRenewal: 5 })]);
+
+    await useCase.renewByDisplayIndex(1, '123');
+
+    expect(repository.updateLifecycleByIdForChat).toHaveBeenCalledWith('search-1', '123', {
+      isActive: true,
+      notificationCountSinceRenewal: 0,
+      requiresRenewal: false,
+      renewalRequestedAt: null,
+      pausedReason: null,
+    });
+  });
+
+  it('marks a search as renewal required when the notification limit is reached', async () => {
+    const { useCase, repository } = fixture([search({ notificationCountSinceRenewal: 4 })]);
+    const at = new Date('2026-06-07T12:00:00.000Z');
+
+    await useCase.recordAutomaticNotification(search({ notificationCountSinceRenewal: 4 }), 5, at);
+
+    expect(repository.updateLifecycleById).toHaveBeenCalledWith('search-1', {
+      notificationCountSinceRenewal: 5,
+      renewalLimit: 5,
+      isActive: false,
+      requiresRenewal: true,
+      renewalRequestedAt: at,
+      pausedReason: FlightSearchPausedReason.RENEWAL_REQUIRED,
+    });
+  });
 });
 
 function fixture(searches: FlightSearch[] = []): {
@@ -53,6 +83,14 @@ function fixture(searches: FlightSearch[] = []): {
       const item = searches.find((candidate) => candidate.id === id);
       return item ? search({ ...item.toPrimitives(), isActive }) : null;
     }),
+    updateLifecycleById: jest.fn(async (id: string, updates: object) => {
+      const item = searches.find((candidate) => candidate.id === id);
+      return item ? search({ ...item.toPrimitives(), ...updates }) : null;
+    }),
+    updateLifecycleByIdForChat: jest.fn(async (id: string, _chatId: string, updates: object) => {
+      const item = searches.find((candidate) => candidate.id === id);
+      return item ? search({ ...item.toPrimitives(), ...updates }) : null;
+    }),
     softDeleteById: jest.fn(async (id: string, deletedAt: Date) => {
       const item = searches.find((candidate) => candidate.id === id);
       return item ? search({ ...item.toPrimitives(), isActive: false, deletedAt }) : null;
@@ -61,6 +99,8 @@ function fixture(searches: FlightSearch[] = []): {
     findManageable: jest.fn(async () => searches),
     findWithoutTelegramChatId: jest.fn(),
     setTelegramChatIdForIds: jest.fn(),
+    findById: jest.fn(),
+    findByIdForChat: jest.fn(),
     findByName: jest.fn(),
   } as unknown as jest.Mocked<FlightSearchRepository>;
 

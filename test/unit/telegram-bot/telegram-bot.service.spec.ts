@@ -609,7 +609,13 @@ describe('TelegramBotService', () => {
 
     expect(client.answerCallbackQuery).toHaveBeenCalledWith('callback-1');
     expect(manageSearches.getByDisplayIndex).toHaveBeenCalledWith(1, '123');
-    expect(client.sendMessage).toHaveBeenCalledWith('123', expect.stringContaining('🔎 Viaje Octubre'));
+    expect(client.sendMessage).toHaveBeenCalledWith('123', expect.stringContaining('🔎 Viaje Octubre'), expect.objectContaining({
+      replyMarkup: expect.objectContaining({
+        inline_keyboard: expect.arrayContaining([
+          [{ text: '🔄 Consultar ahora', callback_data: 'search:manual:1' }],
+        ]),
+      }),
+    }));
   });
 
   it('handles search pause callback scoped by chat', async () => {
@@ -631,6 +637,57 @@ describe('TelegramBotService', () => {
 
     expect(latestWatchRun.execute).toHaveBeenCalledWith('search-1');
     expect(client.sendMessage).toHaveBeenCalledWith('123', expect.stringContaining('🔄 Resumen — Viaje Octubre'));
+  });
+
+  it('manual watch callback runs only the selected search and sends an initial summary', async () => {
+    const { service, client, flightPriceWatch, manageSearches } = fixture({
+      searches: [search({ telegramChatId: '123' })],
+    });
+
+    await service.processUpdate(callbackUpdate('search:manual:1'));
+
+    expect(manageSearches.touchManualWatchByDisplayIndex).toHaveBeenCalledWith(1, '123', expect.any(Date));
+    expect(flightPriceWatch.runOnceForSearch).toHaveBeenCalledWith('search-1', { sendInitialSummary: true, manual: true });
+    expect(client.sendMessage).toHaveBeenCalledWith('123', expect.stringContaining('Consultando precio actual'));
+  });
+
+  it('manual watch callback respects per-alert cooldown', async () => {
+    const { service, client, flightPriceWatch } = fixture({
+      searches: [search({
+        telegramChatId: '123',
+        lastManualWatchAt: new Date(Date.now() - 2 * 60 * 1000),
+      })],
+    });
+
+    await service.processUpdate(callbackUpdate('search:manual:1'));
+
+    expect(flightPriceWatch.runOnceForSearch).not.toHaveBeenCalled();
+    expect(client.sendMessage).toHaveBeenCalledWith('123', expect.stringContaining('Probá de nuevo en'));
+  });
+
+  it('renew callback activates the search and clears renewal state', async () => {
+    const { service, client, manageSearches } = fixture({
+      searches: [search({ telegramChatId: '123', isActive: false, requiresRenewal: true })],
+    });
+
+    await service.processUpdate(callbackUpdate('search:renew:1'));
+
+    expect(manageSearches.renewByDisplayIndex).toHaveBeenCalledWith(1, '123');
+    expect(client.sendMessage).toHaveBeenCalledWith('123', '✅ Perfecto. Sigo monitoreando Viaje Octubre.');
+  });
+
+  it('renewal prompt callbacks keep paused or mark purchased by search id scoped to chat', async () => {
+    const { service, client, manageSearches } = fixture({
+      searches: [search({ telegramChatId: '123', isActive: false, requiresRenewal: true })],
+    });
+
+    await service.processUpdate(callbackUpdate('renewal:pause:search-1'));
+    await service.processUpdate(callbackUpdate('renewal:purchased:search-1', 123, 2));
+
+    expect(manageSearches.keepPausedById).toHaveBeenCalledWith('search-1', '123');
+    expect(manageSearches.markPurchasedById).toHaveBeenCalledWith('search-1', '123');
+    expect(client.sendMessage).toHaveBeenCalledWith('123', '⏸ Mantengo pausada Viaje Octubre.');
+    expect(client.sendMessage).toHaveBeenCalledWith('123', '✅ Genial. Marco Viaje Octubre como comprada y dejo de monitorearla.');
   });
 
   it('validates invalid origin', async () => {
@@ -1078,14 +1135,28 @@ describe('TelegramBotService', () => {
   });
 
   it('/ver with valid index shows search details', async () => {
-    const { service, client, manageSearches } = fixture({ searches: [search({ telegramChatId: '123' })] });
+    const { service, client, manageSearches } = fixture({
+      searches: [search({ telegramChatId: '123', providerCode: FlightProviderCode.AEROLINEAS_ARGENTINAS })],
+    });
 
     await service.processUpdate(update('/ver 1'));
 
     expect(manageSearches.getByDisplayIndex).toHaveBeenCalledWith(1, '123');
     const message = (client.sendMessage as jest.Mock).mock.calls[0][1] as string;
     expect(message).toContain('🔎 Viaje Octubre');
-    expect(message).toContain('Estado: activa');
+    expect(message).toContain('✈️ Ruta');
+    expect(message).toContain('JUJ → AEP → JUJ');
+    expect(message).toContain('San Salvador de Jujuy ↔ Aeroparque');
+    expect(message).toContain('📅 Fechas');
+    expect(message).toContain('10/10/2026 al 15/10/2026');
+    expect(message).toContain('Ida y vuelta · 1 adulto');
+    expect(message).toContain('⚙️ Estado');
+    expect(message).toContain('Activa');
+    expect(message).toContain('Proveedor: Aerolíneas Argentinas');
+    expect(message).toContain('Precio objetivo: sin definir');
+    expect(message).toContain('Todavía no hay consultas registradas.');
+    expect(message).not.toContain('AEROLINEAS_ARGENTINAS');
+    expect(message).not.toContain('undefined');
   });
 
   it('/ver with invalid index shows a clear error', async () => {
@@ -1208,15 +1279,59 @@ describe('TelegramBotService', () => {
   });
 
   it('/ver shows latest watch run when present', async () => {
-    const { service, client, latestWatchRun } = fixture({ searches: [search({ telegramChatId: '123' })], latestRun: watchRun() });
+    const { service, client, latestWatchRun } = fixture({
+      searches: [search({ telegramChatId: '123', providerCode: FlightProviderCode.AEROLINEAS_ARGENTINAS })],
+      latestRun: watchRun(),
+    });
 
     await service.processUpdate(update('/ver 1'));
 
     expect(latestWatchRun.execute).toHaveBeenCalledWith('search-1');
     const message = (client.sendMessage as jest.Mock).mock.calls[0][1] as string;
-    expect(message).toContain('Última corrida:');
-    expect(message).toContain('Más barato: $230.000 ARS');
-    expect(message).toContain('Tarifa recomendada: Base');
+    expect(message).toContain('Última consulta — 24/05/2026');
+    expect(message).toContain('💰 Precio más barato');
+    expect(message).toContain('$230.000 ARS');
+    expect(message).toContain('⭐ Recomendado');
+    expect(message).toContain('$240.000 ARS · Base');
+    expect(message).toContain('Ida recomendada:');
+    expect(message).toContain('AR1517 | JUJ → AEP');
+    expect(message).toContain('10/10/2026 12:00');
+    expect(message).toContain('Vuelta recomendada:');
+    expect(message).toContain('AR1512 | AEP → JUJ');
+    expect(message).toContain('15/10/2026 08:00');
+    expect(message).toContain('✅ Opciones válidas: 5');
+    expect(message).not.toContain('2026-10-10T12:00:00');
+  });
+
+  it('/ver one way does not show return flight details', async () => {
+    const { service, client } = fixture({
+      searches: [search({
+        telegramChatId: '123',
+        returnDate: undefined,
+        tripType: TripType.ONE_WAY,
+        providerCode: FlightProviderCode.AEROLINEAS_ARGENTINAS,
+      })],
+      latestRun: watchRun({ returnDate: undefined, inboundSummary: undefined }),
+    });
+
+    await service.processUpdate(update('/ver 1'));
+
+    const message = (client.sendMessage as jest.Mock).mock.calls[0][1] as string;
+    expect(message).toContain('JUJ → AEP');
+    expect(message).toContain('Solo ida · 1 adulto');
+    expect(message).toContain('Ida recomendada:');
+    expect(message).not.toContain('Vuelta recomendada:');
+  });
+
+  it('/ver paused search shows Pausada', async () => {
+    const { service, client } = fixture({
+      searches: [search({ telegramChatId: '123', isActive: false })],
+    });
+
+    await service.processUpdate(update('/ver 1'));
+
+    const message = (client.sendMessage as jest.Mock).mock.calls[0][1] as string;
+    expect(message).toContain('Pausada');
   });
 
   it('defines TTL for conversation expiration', () => {
@@ -1239,6 +1354,7 @@ function fixture(params: {
   accessMode?: string;
   botUsers?: BotUser[];
   runWatchAfterCreate?: boolean;
+  manualWatchCooldownMinutes?: number;
   watchResult?: object;
   watchError?: Error;
 } = {}): {
@@ -1270,6 +1386,7 @@ function fixture(params: {
   const manageSearches = {
     listManageable: jest.fn(async (chatId?: string) => visibleSearches(chatId)),
     getByDisplayIndex: jest.fn(async (index: number, chatId?: string) => visibleSearches(chatId)[index - 1] ?? null),
+    findByIdForChat: jest.fn(async (id: string, chatId?: string) => visibleSearches(chatId).find((item) => item.id === id) ?? null),
     pauseByDisplayIndex: jest.fn(async (index: number, chatId?: string) => {
       const item = visibleSearches(chatId)[index - 1];
       return item ? search({ ...item.toPrimitives(), isActive: false }) : null;
@@ -1285,6 +1402,39 @@ function fixture(params: {
       }
       searches = searches.filter((candidate) => candidate.id !== item.id);
       return search({ ...item.toPrimitives(), isActive: false, deletedAt: new Date('2026-05-24T00:00:00.000Z') });
+    }),
+    softDeleteByIdForChat: jest.fn(async (id: string, chatId?: string) => {
+      const item = visibleSearches(chatId).find((candidate) => candidate.id === id);
+      if (!item) {
+        return null;
+      }
+      searches = searches.filter((candidate) => candidate.id !== item.id);
+      return search({ ...item.toPrimitives(), isActive: false, deletedAt: new Date('2026-05-24T00:00:00.000Z') });
+    }),
+    touchManualWatchByDisplayIndex: jest.fn(async (index: number, chatId?: string, watchedAt?: Date) => {
+      const item = visibleSearches(chatId)[index - 1];
+      return item ? search({ ...item.toPrimitives(), lastManualWatchAt: watchedAt }) : null;
+    }),
+    renewByDisplayIndex: jest.fn(async (index: number, chatId?: string) => {
+      const item = visibleSearches(chatId)[index - 1];
+      return item ? search({
+        ...item.toPrimitives(),
+        isActive: true,
+        requiresRenewal: false,
+        notificationCountSinceRenewal: 0,
+      }) : null;
+    }),
+    renewById: jest.fn(async (id: string, chatId?: string) => {
+      const item = visibleSearches(chatId).find((candidate) => candidate.id === id);
+      return item ? search({ ...item.toPrimitives(), isActive: true, requiresRenewal: false, notificationCountSinceRenewal: 0 }) : null;
+    }),
+    keepPausedById: jest.fn(async (id: string, chatId?: string) => {
+      const item = visibleSearches(chatId).find((candidate) => candidate.id === id);
+      return item ? search({ ...item.toPrimitives(), isActive: false, requiresRenewal: false }) : null;
+    }),
+    markPurchasedById: jest.fn(async (id: string, chatId?: string) => {
+      const item = visibleSearches(chatId).find((candidate) => candidate.id === id);
+      return item ? search({ ...item.toPrimitives(), isActive: false, requiresRenewal: false }) : null;
     }),
   } as unknown as jest.Mocked<ManageFlightSearchesUseCase>;
   const latestWatchRun = {
@@ -1373,6 +1523,9 @@ function fixture(params: {
       }
       if (key === 'maxSearchesPerUser') {
         return 5;
+      }
+      if (key === 'manualWatchCooldownMinutes') {
+        return params.manualWatchCooldownMinutes ?? 10;
       }
       if (key === 'enableScheduler') {
         return true;
@@ -1495,7 +1648,10 @@ function search(overrides: Partial<ReturnType<FlightSearch['toPrimitives']>> = {
   });
 }
 
-function watchRun(): FlightWatchRun {
+function watchRun(overrides: {
+  returnDate?: Date;
+  inboundSummary?: string;
+} = {}): FlightWatchRun {
   return new FlightWatchRun({
     id: 'run-1',
     searchId: 'search-1',
@@ -1504,7 +1660,9 @@ function watchRun(): FlightWatchRun {
     status: FlightWatchRunStatus.SUCCESS,
     route: 'JUJ-AEP',
     departureDate: new Date('2026-10-10T12:00:00.000Z'),
-    returnDate: new Date('2026-10-15T12:00:00.000Z'),
+    returnDate: Object.prototype.hasOwnProperty.call(overrides, 'returnDate')
+      ? overrides.returnDate
+      : new Date('2026-10-15T12:00:00.000Z'),
     validOptionsCount: 5,
     currency: Currency.ARS,
     cheapestPrice: 230_000,
@@ -1517,7 +1675,9 @@ function watchRun(): FlightWatchRun {
       fareName: 'Base',
       seatsAvailable: 3,
       outboundSummary: 'AR1517 JUJ-AEP 2026-10-10T12:00:00',
-      inboundSummary: 'AR1512 AEP-JUJ 2026-10-15T08:00:00',
+      inboundSummary: Object.prototype.hasOwnProperty.call(overrides, 'inboundSummary')
+        ? overrides.inboundSummary
+        : 'AR1512 AEP-JUJ 2026-10-15T08:00:00',
       tags: ['RECOMMENDED'],
     },
   });

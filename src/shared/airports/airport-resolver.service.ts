@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 export type Airport = {
   code: string;
   city: string;
+  shortName?: string;
   province?: string;
   name: string;
   aliases: string[];
@@ -14,18 +15,18 @@ export type AirportResolution =
   | { type: 'multiple'; airports: Airport[] };
 
 export const ARGENTINA_AIRPORTS: Airport[] = [
-  { code: 'JUJ', city: 'San Salvador de Jujuy', province: 'Jujuy', name: 'Gobernador Horacio Guzmán', aliases: ['Jujuy', 'El Cadillal'] },
-  { code: 'AEP', city: 'Buenos Aires', province: 'CABA', name: 'Aeroparque Jorge Newbery', aliases: ['Aeroparque', 'Jorge Newbery', 'Buenos Aires Aeroparque', 'CABA'] },
-  { code: 'EZE', city: 'Buenos Aires', province: 'Buenos Aires', name: 'Ezeiza Ministro Pistarini', aliases: ['Ezeiza', 'Ministro Pistarini', 'Buenos Aires Ezeiza'] },
-  { code: 'MDZ', city: 'Mendoza', province: 'Mendoza', name: 'El Plumerillo', aliases: ['Mendoza'] },
-  { code: 'COR', city: 'Córdoba', province: 'Córdoba', name: 'Ingeniero Aeronáutico Ambrosio Taravella', aliases: ['Cordoba', 'Pajas Blancas', 'Taravella'] },
-  { code: 'SLA', city: 'Salta', province: 'Salta', name: 'Martín Miguel de Güemes', aliases: ['Martin Miguel de Guemes'] },
-  { code: 'TUC', city: 'Tucumán', province: 'Tucumán', name: 'Teniente Benjamín Matienzo', aliases: ['Tucuman', 'Benjamin Matienzo', 'Teniente Benjamin Matienzo'] },
-  { code: 'IGR', city: 'Puerto Iguazú', province: 'Misiones', name: 'Cataratas del Iguazú', aliases: ['Iguazú', 'Iguazu', 'Puerto Iguazu', 'Cataratas'] },
-  { code: 'BRC', city: 'San Carlos de Bariloche', province: 'Río Negro', name: 'Bariloche', aliases: ['Bariloche'] },
-  { code: 'USH', city: 'Ushuaia', province: 'Tierra del Fuego', name: 'Malvinas Argentinas', aliases: ['Ushuaia'] },
+  { code: 'JUJ', city: 'San Salvador de Jujuy', shortName: 'San Salvador de Jujuy', province: 'Jujuy', name: 'Gobernador Horacio Guzmán', aliases: ['Jujuy', 'El Cadillal'] },
+  { code: 'AEP', city: 'Buenos Aires', shortName: 'Aeroparque', province: 'CABA', name: 'Aeroparque Jorge Newbery', aliases: ['Aeroparque', 'Jorge Newbery', 'Buenos Aires Aeroparque', 'CABA'] },
+  { code: 'EZE', city: 'Buenos Aires', shortName: 'Ezeiza', province: 'Buenos Aires', name: 'Ezeiza Ministro Pistarini', aliases: ['Ezeiza', 'Ministro Pistarini', 'Buenos Aires Ezeiza'] },
+  { code: 'MDZ', city: 'Mendoza', shortName: 'Mendoza', province: 'Mendoza', name: 'El Plumerillo', aliases: ['Mendoza'] },
+  { code: 'COR', city: 'Córdoba', shortName: 'Córdoba', province: 'Córdoba', name: 'Ingeniero Aeronáutico Ambrosio Taravella', aliases: ['Cordoba', 'Pajas Blancas', 'Taravella'] },
+  { code: 'SLA', city: 'Salta', shortName: 'Salta', province: 'Salta', name: 'Martín Miguel de Güemes', aliases: ['Martin Miguel de Guemes'] },
+  { code: 'TUC', city: 'Tucumán', shortName: 'Tucumán', province: 'Tucumán', name: 'Teniente Benjamín Matienzo', aliases: ['Tucuman', 'Benjamin Matienzo', 'Teniente Benjamin Matienzo'] },
+  { code: 'IGR', city: 'Puerto Iguazú', shortName: 'Iguazú', province: 'Misiones', name: 'Cataratas del Iguazú', aliases: ['Iguazú', 'Iguazu', 'Puerto Iguazu', 'Cataratas'] },
+  { code: 'BRC', city: 'San Carlos de Bariloche', shortName: 'Bariloche', province: 'Río Negro', name: 'Bariloche', aliases: ['Bariloche'] },
+  { code: 'USH', city: 'Ushuaia', shortName: 'Ushuaia', province: 'Tierra del Fuego', name: 'Malvinas Argentinas', aliases: ['Ushuaia'] },
   { code: 'FTE', city: 'El Calafate', name: 'El Calafate', aliases: ['Calafate'] },
-  { code: 'NQN', city: 'Neuquén', province: 'Neuquén', name: 'Presidente Perón', aliases: ['Neuquen', 'Presidente Peron'] },
+  { code: 'NQN', city: 'Neuquén', shortName: 'Neuquén', province: 'Neuquén', name: 'Presidente Perón', aliases: ['Neuquen', 'Presidente Peron'] },
   { code: 'ROS', city: 'Rosario', name: 'Rosario', aliases: ['Islas Malvinas'] },
   { code: 'BHI', city: 'Bahía Blanca', name: 'Bahía Blanca', aliases: ['Bahia Blanca'] },
   { code: 'REL', city: 'Trelew', name: 'Trelew', aliases: ['Almirante Zar'] },
