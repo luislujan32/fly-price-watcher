@@ -22,6 +22,8 @@ export type FlightSearchProps = {
   cabinClass: CabinClass;
   currency: Currency;
   adults: number;
+  children?: number;
+  allowStops?: boolean;
   providerCode?: FlightProviderCode;
   telegramChatId?: string;
   targetPrice?: number;
@@ -80,6 +82,14 @@ export class FlightSearch {
 
   get adults(): number {
     return this.props.adults;
+  }
+
+  get children(): number | undefined {
+    return this.props.children;
+  }
+
+  get allowStops(): boolean | undefined {
+    return this.props.allowStops;
   }
 
   get providerCode(): FlightProviderCode | undefined {

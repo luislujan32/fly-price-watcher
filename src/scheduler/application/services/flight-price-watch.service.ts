@@ -4,6 +4,7 @@ import { EvaluateFlightAlertsUseCase } from '../../../flight-alerts/application/
 import { AlertMessageFormatter } from '../../../flight-alerts/domain/services/alert-message.formatter';
 import { SaveFlightPriceSnapshotUseCase } from '../../../flight-prices/application/use-cases/save-flight-price-snapshot.use-case';
 import { FlightProviderRegistry } from '../../../flight-providers/application/services/flight-provider-registry.service';
+import { FlightProviderCode } from '../../../flight-providers/domain/enums/flight-provider-code.enum';
 import { FlightQuery } from '../../../flight-providers/domain/models/flight-query.model';
 import { FlightQuote, FlightQuoteSegment } from '../../../flight-providers/domain/models/flight-quote.model';
 import { FindFlightSearchByIdUseCase } from '../../../flight-searches/application/use-cases/find-flight-search-by-id.use-case';
@@ -32,6 +33,7 @@ export type FlightPriceWatchRunResult = {
   search?: FlightSearch;
   bestQuote?: FlightQuote;
   latestSuccessfulRun?: FlightWatchRun;
+  latestSuccessfulRunBySearchId?: Record<string, FlightWatchRun>;
   error?: string;
 };
 
@@ -94,6 +96,8 @@ export class FlightPriceWatchService {
       validOptionsFound: 0,
       status: undefined,
       search: searches.length === 1 ? searches[0] : undefined,
+      latestSuccessfulRun: undefined,
+      latestSuccessfulRunBySearchId: {},
     };
 
     this.logger.log(`Active searches: ${result.activeSearches}.`);
@@ -117,14 +121,21 @@ export class FlightPriceWatchService {
         cabinClass: search.cabinClass,
         currency: search.currency,
         adults: search.adults,
+        children: search.children,
+        allowStops: search.allowStops === true,
       };
 
-      const providersForSearch = search.providerCode
-        ? providers.filter((provider) => provider.code === search.providerCode)
-        : providers;
+      const providerCode = search.providerCode ?? FlightProviderCode.AEROLINEAS_ARGENTINAS;
+      if (!search.providerCode) {
+        this.logger.warn(
+          `Legacy search without providerCode detected: search="${search.name}". Falling back to provider=${providerCode}.`,
+        );
+      }
 
-      if (search.providerCode && !providersForSearch.length) {
-        this.logger.warn(`Skipping search="${search.name}" because provider=${search.providerCode} is not enabled.`);
+      const providersForSearch = providers.filter((provider) => provider.code === providerCode);
+
+      if (!providersForSearch.length) {
+        this.logger.warn(`Skipping search="${search.name}" because provider=${providerCode} is not enabled.`);
         continue;
       }
 
@@ -187,6 +198,7 @@ export class FlightPriceWatchService {
             result.watchRunsSaved += 1;
             result.status = FlightWatchRunStatus.SUCCESS;
             result.latestSuccessfulRun = currentRun;
+            result.latestSuccessfulRunBySearchId![search.id] = currentRun;
             if (verboseLogs) {
               this.logger.log(`Flight watch run saved: search="${search.name}", provider=${provider.code}, status=SUCCESS, options=${quotes.length}.`);
             }
@@ -227,24 +239,8 @@ export class FlightPriceWatchService {
               }
             }
 
-            if (options.sendInitialSummary) {
-              const notificationResult = await this.notifications.send({
-                title: 'INITIAL_SUMMARY',
-                body: this.alertMessages.initialSummary(search, currentRun),
-                metadata: {
-                  searchId: currentRun.searchId,
-                  providerCode: currentRun.providerCode,
-                  ...(currentRun.id ? { runId: currentRun.id } : {}),
-                  ...(search.telegramChatId ? { telegramChatId: search.telegramChatId } : {}),
-                  notificationType: 'INITIAL_SUMMARY',
-                },
-              });
-              result.notificationAttempts += notificationResult.attempts;
-              result.notificationSuccesses += notificationResult.successes;
-              result.notificationFailures += notificationResult.failures;
-              result.notificationsSent = result.notificationSuccesses;
-              this.logger.log(`Initial search result notification sent for search=${search.id}.`);
-            } else if (alerts.length) {
+            const shouldSendAlertNotifications = !(options.sendInitialSummary && searches.length === 1);
+            if (alerts.length && shouldSendAlertNotifications) {
               const notificationResult = await this.notifications.send({
                 title: '',
                 body: this.alertMessages.consolidated(search, currentRun, alerts),
@@ -309,6 +305,27 @@ export class FlightPriceWatchService {
           );
           result.error = error instanceof Error ? error.message : String(error);
         }
+      }
+
+      const latestRunForSearch = result.latestSuccessfulRunBySearchId?.[search.id];
+      if (options.sendInitialSummary && latestRunForSearch) {
+        const run = latestRunForSearch;
+        const notificationResult = await this.notifications.send({
+          title: 'INITIAL_SUMMARY',
+          body: this.alertMessages.initialSummary(search, run),
+          metadata: {
+            searchId: run.searchId,
+            providerCode: run.providerCode,
+            ...(run.id ? { runId: run.id } : {}),
+            ...(search.telegramChatId ? { telegramChatId: search.telegramChatId } : {}),
+            notificationType: 'INITIAL_SUMMARY',
+          },
+        });
+        result.notificationAttempts += notificationResult.attempts;
+        result.notificationSuccesses += notificationResult.successes;
+        result.notificationFailures += notificationResult.failures;
+        result.notificationsSent = result.notificationSuccesses;
+        this.logger.log(`Initial search result notification sent for search=${search.id}, provider=${run.providerCode}.`);
       }
     }
 

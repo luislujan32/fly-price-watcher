@@ -43,6 +43,7 @@ export class AlertMessageFormatter {
   }
 
   dailySummary(search: FlightSearch, currentRun: FlightWatchRun): string {
+    const allowStops = search.allowStops === true;
     const recommended = currentRun.recommendedOption;
     const isRoundTrip = Boolean(currentRun.returnDate);
     return [
@@ -67,9 +68,11 @@ export class AlertMessageFormatter {
       this.criteria(currentRun.cheapestPrice === currentRun.recommendedPrice),
       '',
       '🔎 Filtros aplicados',
-      '✅ Solo vuelos directos',
+      allowStops ? '✅ Vuelos con escalas permitidos' : '✅ Solo vuelos directos',
       '✅ Aeropuerto exacto',
-      'Se excluyen opciones con escala o desde/hacia otro aeropuerto.',
+      allowStops
+        ? 'Se incluyen vuelos con escala. Se excluyen opciones desde/hacia otro aeropuerto.'
+        : 'Se excluyen opciones con escala o desde/hacia otro aeropuerto.',
       this.debugTagsLine(recommended?.tags ?? []),
     ].filter((line): line is string => line !== undefined).join('\n');
   }
@@ -177,7 +180,7 @@ export class AlertMessageFormatter {
       .map((fare) => `${fare.fareName ?? 'Tarifa'} ${this.money(fare.price, fare.currency)}`);
     const marker = option.isRecommended ? '⭐ ' : '';
     return [
-      `${this.formatOptionNumber(index)} ${marker}${option.flightNumber ?? 'Vuelo'} | ${option.origin ?? '?'} → ${option.destination ?? '?'}`,
+      `${this.formatOptionNumber(index)} ${marker}${option.flightNumber ?? 'Vuelo'} | ${option.origin ?? '?'} → ${option.destination ?? '?'}${option.hasStops ? ' 🔀 con escala' : ''}`,
       `📅 ${this.displayLegDate(option)}`,
       `🕒 ${this.displayLegTimeRange(option)}`,
       `💵 Desde ${this.money(this.legPrice(option), option.currency)} | ${[

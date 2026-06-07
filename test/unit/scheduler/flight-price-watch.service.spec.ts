@@ -50,6 +50,7 @@ describe('FlightPriceWatchService', () => {
       cabinClass: CabinClass.ECONOMY,
       currency: Currency.ARS,
       adults: 1,
+      providerCode: FlightProviderCode.FAKE,
       notifyOnPriceDrop: true,
       notifyAlways: true,
       isActive: true,
@@ -329,5 +330,28 @@ describe('FlightPriceWatchService', () => {
     const output = logSpy.mock.calls.map((call) => String(call[0])).join('\n');
     expect(output).toContain('Price found:');
     expect(output).toContain('Snapshot saved:');
+  });
+
+  it('uses conservative default provider for legacy searches without providerCode', async () => {
+    const { service, provider } = createFixture();
+    const legacySearch = new FlightSearch({
+      id: 'legacy-1',
+      name: 'Legacy search',
+      origin: 'AEP',
+      destination: 'MDZ',
+      departureDate: new Date('2026-07-15T00:00:00.000Z'),
+      tripType: TripType.ONE_WAY,
+      cabinClass: CabinClass.ECONOMY,
+      currency: Currency.ARS,
+      adults: 1,
+      notifyOnPriceDrop: true,
+      notifyAlways: true,
+      isActive: true,
+    });
+    (service as any).listActiveSearches.execute = jest.fn().mockResolvedValue([legacySearch]);
+
+    await service.runOnce();
+
+    expect(provider.search).not.toHaveBeenCalled();
   });
 });

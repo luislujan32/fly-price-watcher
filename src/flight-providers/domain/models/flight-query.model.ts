@@ -14,4 +14,5 @@ export type FlightQuery = {
   adults: number;
   children?: number;
   infants?: number;
+  allowStops?: boolean;
 };

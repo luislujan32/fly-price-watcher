@@ -37,6 +37,12 @@ export class FlightSearchModel {
   @Prop({ required: true, min: 1, default: 1 })
   adults: number;
 
+  @Prop({ min: 0 })
+  children?: number;
+
+  @Prop()
+  allowStops?: boolean;
+
   @Prop({ enum: FlightProviderCode })
   providerCode?: FlightProviderCode;
 

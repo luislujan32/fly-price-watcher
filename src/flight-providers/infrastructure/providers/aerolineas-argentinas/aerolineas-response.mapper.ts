@@ -133,6 +133,7 @@ export class AerolineasResponseMapper {
     query: FlightQuery,
     diagnostics: AerolineasMappingDiagnostics,
   ): boolean {
+    const allowStops = query.allowStops === true;
     const expectedOrigin = candidate.direction === 'outbound' ? query.origin : query.destination;
     const expectedDestination = candidate.direction === 'outbound' ? query.destination : query.origin;
     const expectedDate = candidate.direction === 'outbound'
@@ -144,7 +145,7 @@ export class AerolineasResponseMapper {
       return false;
     }
 
-    if (candidate.hasStops) {
+    if (!allowStops && candidate.hasStops) {
       this.discard(diagnostics, candidate, 'HAS_STOPS', `segments=${candidate.segments.length} stops=${candidate.leg.stops ?? 0}`);
       return false;
     }

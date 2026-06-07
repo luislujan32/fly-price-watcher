@@ -131,16 +131,43 @@ docker compose -f docker-compose.prod.yml logs -f app
 | --------------------- | --------------------------------------------------- |
 | `npm run check:local` | Valida configuración local                          |
 | `npm run start:local` | Levanta la app local con bot/scheduler según `.env` |
-| `npm run build`       | Compila TypeScript                                  |
-| `npm test`            | Ejecuta tests                                       |
-| `npm run check:prod`  | Valida configuración de producción                  |
-| `npm run start:prod`  | Levanta la app compilada fuera de Docker            |
+| `npm run dev:all` | Alias de `start:local` |
+| `npm run check:local` | Valida configuración local |
+| `npm run start:prod` | Levanta la app compilada |
+| `npm run setup:prod` | Sincroniza índices y registra comandos de Telegram |
+| `npm run check:prod` | Valida configuración de producción |
+| `npm run watch:once` | Ejecuta monitoreo manual |
+| `npm run aerolineas:test` | Diagnóstico de Aerolíneas |
+| `npm run jetsmart:test` | Diagnóstico de JetSMART |
+| `npm run dev:fix-search-provider` | Lista providerCode/allowStops de búsquedas existentes |
+| `npm run telegram:test` | Prueba envío Telegram simple |
+| `npm run telegram:debug-config` | Diagnóstico de configuración Telegram |
+| `npm run telegram:test-admin-notification` | Prueba notificación a admins |
+| `npm run telegram:set-commands` | Registra menú común del bot |
+| `npm run db:sync-indexes` | Sincroniza índices Mongo/Mongoose |
+| `npm run migrate:telegram-chat-id` | Asocia búsquedas legacy a un chat |
+| `npm run seed` | Crea/actualiza búsquedas seed |
+| `npm test` | Ejecuta tests |
+| `npm run build` | Compila TypeScript |
 
 ## Variables
 
 Copiá `.env.example` y completá los valores necesarios.
 
-Para beta real necesitás configurar principalmente:
+- `MONGODB_URI`: conexión Mongo.
+- `ENABLE_TELEGRAM_BOT`: activa polling del bot.
+- `ENABLE_SCHEDULER`: activa scheduler diario.
+- `DAILY_RUN_TIME`: hora simple del monitoreo diario, por ejemplo `08:00`.
+- `ENABLED_FLIGHT_PROVIDERS`: providers habilitados, por ejemplo `AEROLINEAS_ARGENTINAS`.
+- `NOTIFICATION_CHANNELS`: canales, por ejemplo `console,telegram`.
+- `TELEGRAM_BOT_TOKEN`: token del bot.
+- `TELEGRAM_CHAT_ID`: chat por defecto para notificaciones simples.
+- `TELEGRAM_ACCESS_MODE`: `approval`, `closed` u `open`.
+- `TELEGRAM_ADMIN_CHAT_IDS`: admins que aprueban usuarios, separados por coma.
+- `RUN_WATCH_AFTER_CREATE`: consulta precio apenas se crea una alerta.
+- `TELEGRAM_HTTP_TIMEOUT_MS`: timeout para Telegram.
+- `TELEGRAM_HTTP_RETRIES`: reintentos cortos para Telegram.
+- `JETSMART_TEST_DEPARTURE`: fecha opcional para `npm run jetsmart:test` (si no está, se usa una fecha futura relativa).
 
 - `MONGODB_URI`
 - `TELEGRAM_BOT_TOKEN`

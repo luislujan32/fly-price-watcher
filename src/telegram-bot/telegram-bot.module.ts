@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { FlightAlertsModule } from '../flight-alerts/flight-alerts.module';
 import { FlightSearchesModule } from '../flight-searches/flight-searches.module';
 import { AirportResolverService } from '../shared/airports/airport-resolver.service';
 import { FlightWatchRunsModule } from '../flight-watch-runs/flight-watch-runs.module';
@@ -19,6 +20,7 @@ import {
 
 @Module({
   imports: [
+    FlightAlertsModule,
     FlightSearchesModule,
     FlightWatchRunsModule,
     SchedulerModule,
