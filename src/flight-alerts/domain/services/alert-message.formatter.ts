@@ -43,6 +43,7 @@ export class AlertMessageFormatter {
   }
 
   dailySummary(search: FlightSearch, currentRun: FlightWatchRun): string {
+    const allowStops = search.allowStops === true;
     const recommended = currentRun.recommendedOption;
     const isRoundTrip = Boolean(currentRun.returnDate);
     return [
@@ -67,9 +68,9 @@ export class AlertMessageFormatter {
       this.criteria(currentRun.cheapestPrice === currentRun.recommendedPrice),
       '',
       'Filtros aplicados:',
-      search.allowStops !== false ? '✅ Vuelos con escalas permitidos' : '✅ Solo vuelos directos',
+      allowStops ? '✅ Vuelos con escalas permitidos' : '✅ Solo vuelos directos',
       '✅ Aeropuerto exacto',
-      search.allowStops !== false
+      allowStops
         ? 'Se incluyen vuelos con escala. Se excluyen opciones desde/hacia otro aeropuerto.'
         : 'Se excluyen opciones con escala o desde/hacia otro aeropuerto.',
       this.debugTagsLine(recommended?.tags ?? []),

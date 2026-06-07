@@ -2,7 +2,8 @@ import 'reflect-metadata';
 import * as mongoose from 'mongoose';
 
 async function run(): Promise<void> {
-  await mongoose.connect('mongodb://localhost:27017/flight-price-watcher');
+  const mongodbUri = process.env.MONGODB_URI ?? 'mongodb://localhost:27017/flight-price-watcher';
+  await mongoose.connect(mongodbUri);
   const all = await mongoose.connection.db!
     .collection('flight_searches')
     .find({}, { projection: { name: 1, providerCode: 1, allowStops: 1, origin: 1, destination: 1 } })

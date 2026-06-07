@@ -23,6 +23,8 @@ export class JetSmartProvider implements FlightProviderPort {
   ) {}
 
   async search(query: FlightQuery): Promise<FlightQuote[]> {
+    const allowStops = query.allowStops === true;
+
     if (query.tripType === TripType.ONE_WAY) {
       return this.searchOneLeg(query.origin, query.destination, query.departureDate, query);
     }
@@ -40,56 +42,60 @@ export class JetSmartProvider implements FlightProviderPort {
       return [];
     }
 
-    const outboundOptions = oneWayOutbound[0]?.outboundOptions;
-    const inboundOptions = this.asInboundOptions(oneWayInbound[0]?.outboundOptions);
-
     const combined = oneWayOutbound.flatMap((outbound) =>
-      oneWayInbound.map((inbound) => ({
-        searchId: query.searchId,
-        providerCode: FlightProviderCode.JETSMART,
-        outboundPrice: outbound.totalPrice,
-        inboundPrice: inbound.totalPrice,
-        totalPrice: outbound.totalPrice + inbound.totalPrice,
-        currency: query.currency,
-        capturedAt: new Date(),
-        itinerarySummary: `${outbound.itinerarySummary} | ${inbound.itinerarySummary}`,
-        pricingSource: 'sum_of_bounds' as const,
-        outboundSegments: outbound.outboundSegments,
-        inboundSegments: inbound.outboundSegments,
-        outboundOptions,
-        inboundOptions,
-        outboundDepartureTime: outbound.outboundDepartureTime,
-        inboundDepartureTime: inbound.outboundDepartureTime,
-        fareName: outbound.fareName,
-        outboundFareName: outbound.outboundFareName,
-        inboundFareName: inbound.outboundFareName,
-        hasStops: Boolean(outbound.hasStops || inbound.hasStops),
-        metadata: {
-          outboundPrice: outbound.totalPrice,
-          inboundPrice: inbound.totalPrice,
-          pricingSource: 'sum_of_bounds' as const,
-          outboundSegments: outbound.outboundSegments,
-          inboundSegments: inbound.outboundSegments,
-          outboundOptions,
-          inboundOptions,
-          outboundDepartureTime: outbound.outboundDepartureTime,
-          inboundDepartureTime: inbound.outboundDepartureTime,
-          actualOutboundOrigin: query.origin,
-          actualOutboundDestination: query.destination,
-          actualInboundOrigin: query.destination,
-          actualInboundDestination: query.origin,
-          fareName: outbound.fareName,
-          outboundFareName: outbound.outboundFareName,
-          inboundFareName: inbound.outboundFareName,
-          hasStops: Boolean(outbound.hasStops || inbound.hasStops),
-        },
-      })),
+      oneWayInbound
+        .map((inbound) => {
+          const outboundOptions = outbound.outboundOptions;
+          const inboundOptions = this.asInboundOptions(inbound.outboundOptions);
+          return {
+            searchId: query.searchId,
+            providerCode: FlightProviderCode.JETSMART,
+            outboundPrice: outbound.totalPrice,
+            inboundPrice: inbound.totalPrice,
+            totalPrice: outbound.totalPrice + inbound.totalPrice,
+            currency: query.currency,
+            capturedAt: new Date(),
+            itinerarySummary: `${outbound.itinerarySummary} | ${inbound.itinerarySummary}`,
+            pricingSource: 'sum_of_bounds' as const,
+            outboundSegments: outbound.outboundSegments,
+            inboundSegments: inbound.outboundSegments,
+            outboundOptions,
+            inboundOptions,
+            outboundDepartureTime: outbound.outboundDepartureTime,
+            inboundDepartureTime: inbound.outboundDepartureTime,
+            fareName: outbound.fareName,
+            outboundFareName: outbound.outboundFareName,
+            inboundFareName: inbound.outboundFareName,
+            hasStops: Boolean(outbound.hasStops || inbound.hasStops),
+            metadata: {
+              outboundPrice: outbound.totalPrice,
+              inboundPrice: inbound.totalPrice,
+              pricingSource: 'sum_of_bounds' as const,
+              outboundSegments: outbound.outboundSegments,
+              inboundSegments: inbound.outboundSegments,
+              outboundOptions,
+              inboundOptions,
+              outboundDepartureTime: outbound.outboundDepartureTime,
+              inboundDepartureTime: inbound.outboundDepartureTime,
+              actualOutboundOrigin: query.origin,
+              actualOutboundDestination: query.destination,
+              actualInboundOrigin: query.destination,
+              actualInboundDestination: query.origin,
+              fareName: outbound.fareName,
+              outboundFareName: outbound.outboundFareName,
+              inboundFareName: inbound.outboundFareName,
+              hasStops: Boolean(outbound.hasStops || inbound.hasStops),
+            },
+          };
+        })
+        .filter((candidate) => allowStops || !candidate.hasStops),
     );
 
     return this.ranking.rank(combined);
   }
 
   private async searchOneLeg(origin: string, destination: string, date: Date, query: FlightQuery): Promise<FlightQuote[]> {
+    const allowStops = query.allowStops === true;
     const pointOfSaleCountry = this.config.get<string>('jetsmartPointOfSaleCountry') ?? 'AR';
     const oneWayQuery: FlightQuery = { ...query, origin, destination, departureDate: date, returnDate: undefined, tripType: TripType.ONE_WAY };
 
@@ -97,7 +103,7 @@ export class JetSmartProvider implements FlightProviderPort {
     const directResponse = await this.apiClient.searchAvailability(directParams);
     const directQuotes = this.responseMapper.toFlightQuotes({ searchId: query.searchId, response: directResponse, query: oneWayQuery });
 
-    if (directQuotes.length > 0 || query.allowStops === false) {
+    if (directQuotes.length > 0 || !allowStops) {
       return directQuotes;
     }
 

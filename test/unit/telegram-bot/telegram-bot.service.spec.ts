@@ -462,18 +462,19 @@ describe('TelegramBotService', () => {
 
     await service.processUpdate(update('Viaje Test'));
 
-    expect(client.sendMessage).toHaveBeenCalledWith('123', expect.stringContaining('📍 Origen'), {
-      replyMarkup: {
-        inline_keyboard: expect.arrayContaining([
-          [{ text: 'JUJ — Jujuy', callback_data: 'select_airport:origin:JUJ' }],
-          [{ text: 'AEP — Aeroparque', callback_data: 'select_airport:origin:AEP' }],
-          [{ text: 'EZE — Ezeiza', callback_data: 'select_airport:origin:EZE' }],
-          [{ text: 'MDZ — Mendoza', callback_data: 'select_airport:origin:MDZ' }],
-          [{ text: 'COR — Córdoba', callback_data: 'select_airport:origin:COR' }],
-          [{ text: 'SLA — Salta', callback_data: 'select_airport:origin:SLA' }],
-        ]),
-      },
-    });
+    const originCall = (client.sendMessage as jest.Mock).mock.calls.find((call) =>
+      String(call[1]).includes('📍 Origen'),
+    );
+    expect(originCall).toBeDefined();
+    const keyboard = originCall?.[2]?.replyMarkup?.inline_keyboard?.flat() ?? [];
+    expect(keyboard).toEqual(expect.arrayContaining([
+      expect.objectContaining({ callback_data: 'select_airport:origin:JUJ' }),
+      expect.objectContaining({ callback_data: 'select_airport:origin:AEP' }),
+      expect.objectContaining({ callback_data: 'select_airport:origin:EZE' }),
+      expect.objectContaining({ callback_data: 'select_airport:origin:MDZ' }),
+      expect.objectContaining({ callback_data: 'select_airport:origin:COR' }),
+      expect.objectContaining({ callback_data: 'select_airport:origin:SLA' }),
+    ]));
   });
 
   it('shows frequent airport buttons when asking for destination', async () => {
@@ -482,18 +483,19 @@ describe('TelegramBotService', () => {
     await service.processUpdate(update('JUJ'));
 
     expect(client.sendMessage).toHaveBeenCalledWith('123', '✅ Origen seleccionado:\nJUJ — San Salvador de Jujuy');
-    expect(client.sendMessage).toHaveBeenCalledWith('123', expect.stringContaining('📍 Destino'), {
-      replyMarkup: {
-        inline_keyboard: expect.arrayContaining([
-          [{ text: 'JUJ — Jujuy', callback_data: 'select_airport:destination:JUJ' }],
-          [{ text: 'AEP — Aeroparque', callback_data: 'select_airport:destination:AEP' }],
-          [{ text: 'EZE — Ezeiza', callback_data: 'select_airport:destination:EZE' }],
-          [{ text: 'MDZ — Mendoza', callback_data: 'select_airport:destination:MDZ' }],
-          [{ text: 'COR — Córdoba', callback_data: 'select_airport:destination:COR' }],
-          [{ text: 'SLA — Salta', callback_data: 'select_airport:destination:SLA' }],
-        ]),
-      },
-    });
+    const destinationCall = (client.sendMessage as jest.Mock).mock.calls.find((call) =>
+      String(call[1]).includes('📍 Destino'),
+    );
+    expect(destinationCall).toBeDefined();
+    const keyboard = destinationCall?.[2]?.replyMarkup?.inline_keyboard?.flat() ?? [];
+    expect(keyboard).toEqual(expect.arrayContaining([
+      expect.objectContaining({ callback_data: 'select_airport:destination:JUJ' }),
+      expect.objectContaining({ callback_data: 'select_airport:destination:AEP' }),
+      expect.objectContaining({ callback_data: 'select_airport:destination:EZE' }),
+      expect.objectContaining({ callback_data: 'select_airport:destination:MDZ' }),
+      expect.objectContaining({ callback_data: 'select_airport:destination:COR' }),
+      expect.objectContaining({ callback_data: 'select_airport:destination:SLA' }),
+    ]));
   });
 
   it('lists active FlightSearches for /listar', async () => {
@@ -833,10 +835,22 @@ describe('TelegramBotService', () => {
     await service.processUpdate(callbackUpdate('create:adults:2'));
 
     expect(conversations.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      step: CreateSearchStep.TARGET_PRICE_CHOICE,
+      step: CreateSearchStep.CHILDREN,
       draft: expect.objectContaining({ adults: 2 }),
     }));
-    expect(client.sendMessage).toHaveBeenCalledWith('123', expect.stringContaining('¿Querés definir un precio objetivo?'), expect.any(Object));
+    expect(client.sendMessage).toHaveBeenCalledWith('123', expect.stringContaining('¿Viajan niños?'), expect.any(Object));
+  });
+
+  it('rejects invalid provider callback and asks for provider again', async () => {
+    const { service, client, conversations } = fixture({
+      state: state(CreateSearchStep.PROVIDER, completeDraft({ allowStops: false })),
+    });
+
+    await service.processUpdate(callbackUpdate('create:provider:NOT_A_PROVIDER'));
+
+    expect(conversations.upsert).not.toHaveBeenCalled();
+    expect(client.sendMessage).toHaveBeenCalledWith('123', 'No pude interpretar la aerolínea elegida. Elegí una opción válida.');
+    expect(client.sendMessage).toHaveBeenCalledWith('123', '¿Qué aerolínea querés consultar?', expect.any(Object));
   });
 
   it('validates invalid departure date', async () => {
@@ -913,6 +927,18 @@ describe('TelegramBotService', () => {
     expect(conversations.deleteByChatId).toHaveBeenCalledWith('123');
     expect(client.sendMessage).toHaveBeenCalledWith('123', '✅ Alerta creada. Voy a consultar el precio actual...');
     expect(flightPriceWatch.runOnceForSearch).toHaveBeenCalledWith('search-1', { sendInitialSummary: true });
+  });
+
+  it('uses conservative default provider when draft has no providerCode', async () => {
+    const { service, createFlightSearch } = fixture({
+      state: state(CreateSearchStep.CONFIRMATION, completeDraft({ providerCode: undefined })),
+    });
+
+    await service.processUpdate(callbackUpdate('create:confirm'));
+
+    expect(createFlightSearch.execute).toHaveBeenCalledWith(expect.objectContaining({
+      providerCode: FlightProviderCode.AEROLINEAS_ARGENTINAS,
+    }));
   });
 
   it('responds clearly when duplicate key happens while creating a search', async () => {

@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AlertMessageFormatter } from '../../flight-alerts/domain/services/alert-message.formatter';
 import { CreateFlightSearchUseCase } from '../../flight-searches/application/use-cases/create-flight-search.use-case';
 import { ManageFlightSearchesUseCase } from '../../flight-searches/application/use-cases/manage-flight-searches.use-case';
 import { FlightSearch } from '../../flight-searches/domain/entities/flight-search.entity';
@@ -51,7 +50,6 @@ export class TelegramBotService {
     private readonly manageSearches: ManageFlightSearchesUseCase,
     private readonly latestWatchRun: GetLatestWatchRunUseCase,
     private readonly flightPriceWatch: FlightPriceWatchService,
-    private readonly alertMessages: AlertMessageFormatter,
     private readonly airports: AirportResolverService,
     private readonly accessControl: TelegramAccessControlService,
     @Inject(TELEGRAM_CONVERSATION_STATE_REPOSITORY)
@@ -531,6 +529,11 @@ export class TelegramBotService {
     }
     if (data.startsWith('create:provider:')) {
       const providerKey = data.replace('create:provider:', '');
+      if (!this.isValidProviderCode(providerKey)) {
+        await this.client.sendMessage(chatId, 'No pude interpretar la aerolínea elegida. Elegí una opción válida.');
+        await this.askProvider(chatId, draft.origin, draft.destination);
+        return;
+      }
       const providerCode = providerKey;
       await this.saveCreateSearchState(chatId, CreateSearchStep.TARGET_PRICE_CHOICE, { ...draft, providerCode });
       await this.askTargetPriceChoice(chatId);
@@ -811,7 +814,7 @@ export class TelegramBotService {
       `Alertas activas: ${activeSearches}`,
       `Límite de alertas: ${this.maxSearchesPerUser()}`,
       `Scheduler: ${this.config.get<boolean>('enableScheduler') === true ? 'activo' : 'inactivo'}`,
-      `Consulta al crear: activa`,
+      `Consulta al crear: ${this.runWatchAfterCreate() ? 'activa' : 'inactiva'}`,
     ].join('\n'));
   }
 
@@ -1325,6 +1328,10 @@ export class TelegramBotService {
       throw { code: 11000 };
     }
 
+    const providerCode = draft.providerCode && this.isValidProviderCode(draft.providerCode)
+      ? draft.providerCode
+      : FlightProviderCode.AEROLINEAS_ARGENTINAS;
+
     return this.createFlightSearch.execute({
       name: draft.name,
       origin: draft.origin,
@@ -1337,7 +1344,7 @@ export class TelegramBotService {
       adults: draft.adults,
       children: draft.children ?? 0,
       allowStops: draft.allowStops ?? false,
-      providerCode: draft.providerCode ? draft.providerCode as FlightProviderCode : undefined,
+      providerCode,
       telegramChatId: chatId,
       targetPrice: draft.targetPrice,
       notifyAlways: true,
@@ -1347,6 +1354,11 @@ export class TelegramBotService {
   }
 
   private async afterCreateSearch(chatId: string, search: FlightSearch): Promise<void> {
+    if (!this.runWatchAfterCreate()) {
+      await this.client.sendMessage(chatId, 'Alerta creada. La revisaré en la próxima ejecución programada.');
+      return;
+    }
+
     await this.client.sendMessage(chatId, '✅ Alerta creada. Voy a consultar el precio actual...');
     if (!search.id) {
       await this.client.sendMessage(chatId, 'La alerta fue creada, pero no pude consultar el precio ahora. Lo intentaré en la próxima ejecución programada.');
@@ -1354,16 +1366,23 @@ export class TelegramBotService {
     }
 
     try {
-      const result = await this.flightPriceWatch.runOnceForSearch(search.id);
+      const result = await this.flightPriceWatch.runOnceForSearch(search.id, { sendInitialSummary: true });
       if (!result.latestSuccessfulRun) {
         await this.client.sendMessage(chatId, 'Alerta creada. No encontré vuelos válidos para esta búsqueda por ahora.');
         return;
       }
-      await this.client.sendMessage(chatId, this.alertMessages.initialSummary(search, result.latestSuccessfulRun));
     } catch (error) {
       this.logger.warn(`Initial watch after create failed for search=${search.id}: ${this.errorMessage(error)}`);
       await this.client.sendMessage(chatId, 'La alerta fue creada, pero no pude consultar el precio ahora. Lo intentaré en la próxima ejecución programada.');
     }
+  }
+
+  private runWatchAfterCreate(): boolean {
+    return this.config.get<boolean>('runWatchAfterCreate') !== false;
+  }
+
+  private isValidProviderCode(value: string): value is FlightProviderCode {
+    return Object.values(FlightProviderCode).includes(value as FlightProviderCode);
   }
 
   private maxSearchesPerUser(): number {

@@ -22,6 +22,7 @@
     "setup:prod": "ts-node -r tsconfig-paths/register src/production/run-setup-prod.ts",
     "check:prod": "ts-node -r tsconfig-paths/register src/production/run-check-prod.ts",
     "check:local": "ts-node -r tsconfig-paths/register src/development/run-check-local.ts",
+    "dev:fix-search-provider": "ts-node -r tsconfig-paths/register src/development/fix-search-provider.ts",
     "aerolineas:test": "ts-node -r tsconfig-paths/register src/flight-providers/infrastructure/providers/aerolineas-argentinas/run-aerolineas-test.ts",
     "jetsmart:test": "ts-node -r tsconfig-paths/register src/flight-providers/infrastructure/providers/jetsmart/run-jetsmart-test.ts",
     "test": "jest --runInBand"

@@ -70,6 +70,8 @@ npm run start:local
 | `npm run check:prod` | Valida configuración de producción |
 | `npm run watch:once` | Ejecuta monitoreo manual |
 | `npm run aerolineas:test` | Diagnóstico de Aerolíneas |
+| `npm run jetsmart:test` | Diagnóstico de JetSMART |
+| `npm run dev:fix-search-provider` | Lista providerCode/allowStops de búsquedas existentes |
 | `npm run telegram:test` | Prueba envío Telegram simple |
 | `npm run telegram:debug-config` | Diagnóstico de configuración Telegram |
 | `npm run telegram:test-admin-notification` | Prueba notificación a admins |
@@ -97,6 +99,7 @@ No están todas listadas acá. Usá `.env.local.example` y `.env.production.exam
 - `RUN_WATCH_AFTER_CREATE`: consulta precio apenas se crea una alerta.
 - `TELEGRAM_HTTP_TIMEOUT_MS`: timeout para Telegram.
 - `TELEGRAM_HTTP_RETRIES`: reintentos cortos para Telegram.
+- `JETSMART_TEST_DEPARTURE`: fecha opcional para `npm run jetsmart:test` (si no está, se usa una fecha futura relativa).
 
 ## Archivos Env
 

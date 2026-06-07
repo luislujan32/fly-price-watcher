@@ -13,6 +13,13 @@ import { JetSmartProvider } from './jetsmart.provider';
 import { JetSmartQueryMapper } from './jetsmart-query.mapper';
 import { JetSmartResponseMapper } from './jetsmart-response.mapper';
 
+function defaultFutureDateIso(daysAhead = 30): string {
+  const date = new Date();
+  date.setUTCHours(12, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + daysAhead);
+  return date.toISOString();
+}
+
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true, load: [appConfig] })],
   providers: [
@@ -37,7 +44,7 @@ async function run(): Promise<void> {
       searchId: 'jetsmart-test',
       origin: process.env.JETSMART_TEST_ORIGIN ?? 'AEP',
       destination: process.env.JETSMART_TEST_DESTINATION ?? 'MDZ',
-      departureDate: new Date(process.env.JETSMART_TEST_DEPARTURE ?? '2026-10-10T12:00:00.000Z'),
+      departureDate: new Date(process.env.JETSMART_TEST_DEPARTURE ?? defaultFutureDateIso()),
       returnDate: process.env.JETSMART_TEST_RETURN ? new Date(process.env.JETSMART_TEST_RETURN) : undefined,
       tripType: process.env.JETSMART_TEST_RETURN ? TripType.ROUND_TRIP : TripType.ONE_WAY,
       cabinClass: CabinClass.ECONOMY,
